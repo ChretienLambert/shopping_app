@@ -30,7 +30,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Catalogs'),
+        title: Text(tr(ref, 'catalogs')),
         backgroundColor: Colors.transparent,
       ),
       body: Column(
@@ -104,7 +104,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: ChoiceChip(
-              label: const Text('All'),
+              label: Text(tr(ref, 'all')),
               selected: _selectedFilterCategory == null,
               onSelected: (selected) {
                 setState(() => _selectedFilterCategory = selected ? null : _selectedFilterCategory);
@@ -290,7 +290,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('Update Price and Stock'),
+          title: Text(tr(ref, 'update_price_and_stock')),
           content: Form(
             key: formKey,
             child: SingleChildScrollView(
@@ -352,7 +352,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(tr(ref, 'cancel')),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -377,7 +377,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                 }
               },
               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
-              child: const Text('Update'),
+              child: Text(tr(ref, 'update')),
             ),
           ],
         ),

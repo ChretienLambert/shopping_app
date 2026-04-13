@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS products (
     name TEXT NOT NULL,
     description TEXT,
     price DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    purchase_price DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    product_type TEXT,
+    quality TEXT,
     stock_quantity INTEGER NOT NULL DEFAULT 0,
     image_path TEXT,
     deleted_at TIMESTAMP WITH TIME ZONE,
@@ -94,6 +97,13 @@ CREATE TABLE IF NOT EXISTS expenses (
     expense_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     notes TEXT,
     receipt_image_path TEXT,
+    stock_product_name TEXT,
+    stock_product_type TEXT,
+    stock_quality TEXT,
+    stock_quantity INTEGER,
+    stock_purchase_price DECIMAL(12, 2),
+    stock_resale_price DECIMAL(12, 2),
+    stock_image_path TEXT,
     deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -149,3 +159,18 @@ CREATE INDEX IF NOT EXISTS idx_customers_user ON customers(user_id);
 CREATE INDEX IF NOT EXISTS idx_sales_user ON sales(user_id);
 CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses(user_id);
 CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id);
+
+-- 12. Incremental updates for already-existing projects
+ALTER TABLE products
+  ADD COLUMN IF NOT EXISTS purchase_price DECIMAL(12, 2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS product_type TEXT,
+  ADD COLUMN IF NOT EXISTS quality TEXT;
+
+ALTER TABLE expenses
+  ADD COLUMN IF NOT EXISTS stock_product_name TEXT,
+  ADD COLUMN IF NOT EXISTS stock_product_type TEXT,
+  ADD COLUMN IF NOT EXISTS stock_quality TEXT,
+  ADD COLUMN IF NOT EXISTS stock_quantity INTEGER,
+  ADD COLUMN IF NOT EXISTS stock_purchase_price DECIMAL(12, 2),
+  ADD COLUMN IF NOT EXISTS stock_resale_price DECIMAL(12, 2),
+  ADD COLUMN IF NOT EXISTS stock_image_path TEXT;

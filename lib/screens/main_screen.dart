@@ -304,17 +304,17 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     return await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Exit App'),
-        content: const Text('Are you sure you want to exit Corporate Ladies?'),
+        title: Text(tr(ref, 'exit_app')),
+        content: Text(tr(ref, 'are_you_sure_exit')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(tr(ref, 'cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Exit'),
+            child: Text(tr(ref, 'exit')),
           ),
         ],
       ),

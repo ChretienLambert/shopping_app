@@ -11,6 +11,7 @@ import '../providers/product_provider.dart';
 import '../providers/customer_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/currency_utils.dart';
+import '../utils/app_localization.dart';
 
 class SalesScreen extends ConsumerStatefulWidget {
   const SalesScreen({super.key});
@@ -212,14 +213,14 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     final isDelivery = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('New Sale Type'),
-        content: const Text('Is this a direct store sale or a delivery?'),
+        title: Text(tr(ref, 'new_sale_type')),
+        content: Text(tr(ref, 'is_this_direct_or_delivery')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
-              children: [Icon(Icons.storefront_rounded), SizedBox(width: 8), Text('Direct Sale')],
+              children: [Icon(Icons.storefront_rounded), SizedBox(width: 8), Text(tr(ref, 'direct_sale'))],
             ),
           ),
           ElevatedButton(
@@ -227,7 +228,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
-              children: [Icon(Icons.local_shipping_rounded), SizedBox(width: 8), Text('Delivery')],
+              children: [Icon(Icons.local_shipping_rounded), SizedBox(width: 8), Text(tr(ref, 'delivery'))],
             ),
           ),
         ],
@@ -325,11 +326,11 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                         border: OutlineInputBorder(),
                       ),
                       items: const [
-                        DropdownMenuItem(value: 0, child: Text('No Discount')),
-                        DropdownMenuItem(value: 5, child: Text('5%')),
-                        DropdownMenuItem(value: 10, child: Text('10%')),
-                        DropdownMenuItem(value: 15, child: Text('15%')),
-                        DropdownMenuItem(value: 20, child: Text('20%')),
+                        DropdownMenuItem(value: 0, child: Text(tr(ref, 'no_discount'))),
+                        DropdownMenuItem(value: 5, child: Text(tr(ref, 'five_percent'))),
+                        DropdownMenuItem(value: 10, child: Text(tr(ref, 'ten_percent'))),
+                        DropdownMenuItem(value: 15, child: Text(tr(ref, 'fifteen_percent'))),
+                        DropdownMenuItem(value: 20, child: Text(tr(ref, 'twenty_percent'))),
                       ],
                       onChanged: (value) {
                         setState(() => discountPercent = value ?? 0);
@@ -357,7 +358,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  const Text('Inventory Selection:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(tr(ref, 'inventory_selection'), style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Container(
                     height: 250,
@@ -428,7 +429,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Subtotal'),
+                            Text(tr(ref, 'subtotal')),
                             Text(
                               CurrencyUtils.format(
                                 saleItems.fold(0.0, (sum, i) => sum + i.totalPrice),
@@ -441,7 +442,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Discount (${discountPercent.toStringAsFixed(0)}%)'),
+                              Text('${tr(ref, 'discount')} (${discountPercent.toStringAsFixed(0)}%)'),
                               Text(
                                 '-${CurrencyUtils.format((saleItems.fold(0.0, (sum, i) => sum + i.totalPrice) * discountPercent) / 100)}',
                                 style: const TextStyle(color: Colors.green),
@@ -453,7 +454,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Grand Total', style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text(tr(ref, 'grand_total'), style: TextStyle(fontWeight: FontWeight.bold)),
                             Text(
                               CurrencyUtils.format(
                                 saleItems.fold(0.0, (sum, i) => sum + i.totalPrice) *
@@ -501,7 +502,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
               ),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(tr(ref, 'cancel')),
             ),
             ElevatedButton(
               onPressed: saleItems.isEmpty ? null : () async {
@@ -546,7 +547,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                 if (context.mounted) Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
-              child: const Text('Confirm Sale'),
+              child: Text(tr(ref, 'confirm_sale')),
             ),
           ],
         ),
@@ -562,7 +563,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     final result = await showDialog<Customer>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Quick Add Customer'),
+        title: Text(tr(ref, 'quick_add_customer')),
         content: Form(
           key: formKey,
           child: Column(
@@ -584,7 +585,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr(ref, 'cancel'))),
           ElevatedButton(
             onPressed: () async {
               if (formKey.currentState!.validate()) {
@@ -594,7 +595,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
-            child: const Text('Save'),
+            child: Text(tr(ref, 'save')),
           ),
         ],
       ),
@@ -618,7 +619,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            const Text('Sale Details'),
+            Text(tr(ref, 'sale_details')),
             const Spacer(),
             _buildStatusBadge(sale),
           ],
@@ -647,7 +648,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                 if (sale.deliveryAddress != null) _buildDetailRow('Address', sale.deliveryAddress!),
               ],
               const Divider(height: 32),
-              const Text('Items', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(tr(ref, 'items'), style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               ...saleItems.map((item) {
                 return FutureBuilder<Product?>(
@@ -676,11 +677,11 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                 if (context.mounted) Navigator.pop(context);
               },
               icon: const Icon(Icons.check_circle_outline_rounded),
-              label: const Text('Confirm Paid'),
+              label: Text(tr(ref, 'confirm_paid')),
             ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(tr(ref, 'close')),
           ),
         ],
       ),

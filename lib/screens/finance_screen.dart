@@ -150,7 +150,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                       realizedProfit: realizedProfit,
                     ),
                     icon: const Icon(Icons.calendar_today_rounded),
-                    label: const Text('Weekly Checkup'),
+                    label: Text(tr(ref, 'weekly_checkup')),
                   ),
                 ),
               ],
@@ -255,9 +255,9 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Text('Stock Deployed: ${CurrencyUtils.format(stockExpenses)}'),
-          Text('Recovered from Sales: ${CurrencyUtils.format(capitalRecovered)}'),
-          Text('Remaining to Recover: ${CurrencyUtils.format(remainingCapital)}'),
+          Text('${tr(ref, 'stock_deployed')} ${CurrencyUtils.format(stockExpenses)}'),
+          Text('${tr(ref, 'recovered_from_sales')} ${CurrencyUtils.format(capitalRecovered)}'),
+          Text('${tr(ref, 'remaining_to_recover')} ${CurrencyUtils.format(remainingCapital)}'),
           const SizedBox(height: 8),
           LinearProgressIndicator(value: completion.clamp(0, 1)),
           const SizedBox(height: 8),
@@ -389,7 +389,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Capital Injections', style: TextStyle(fontWeight: FontWeight.bold)),
+        Text(tr(ref, 'capital_injections'), style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         ...List.generate(_injections.length, (index) {
           final i = _injections[_injections.length - 1 - index];
@@ -413,7 +413,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Capital Injection Details'),
+        title: Text(tr(ref, 'capital_injection_details')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -432,9 +432,9 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
               Navigator.pop(context);
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(tr(ref, 'delete')),
           ),
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr(ref, 'close'))),
         ],
       ),
     );
@@ -459,7 +459,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     final result = await showDialog<_CapitalInjection>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Inject Capital'),
+        title: Text(tr(ref, 'inject_capital')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -476,7 +476,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr(ref, 'cancel'))),
           ElevatedButton(
             onPressed: () => Navigator.pop(
               context,
@@ -488,7 +488,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                 date: DateTime.now(),
               ),
             ),
-            child: const Text('Add'),
+            child: Text(tr(ref, 'add')),
           ),
         ],
       ),
@@ -529,7 +529,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           children: [
             Icon(Icons.summarize_outlined, color: AppTheme.primaryBlue),
             const SizedBox(width: 8),
-            const Text('Financial Resume'),
+            Text(tr(ref, 'financial_resume')),
           ],
         ),
         content: SingleChildScrollView(
@@ -551,7 +551,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                       children: [
                         Icon(Icons.account_balance_wallet_rounded, size: 16, color: AppTheme.primaryBlue),
                         const SizedBox(width: 6),
-                        const Text('Capital Overview', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        Text(tr(ref, 'capital_overview'), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -583,7 +583,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                           color: realizedProfit >= 0 ? Colors.green : Colors.red,
                         ),
                         const SizedBox(width: 6),
-                        const Text('Profit Analysis', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        Text(tr(ref, 'profit_analysis'), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -608,7 +608,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                       children: [
                         const Icon(Icons.receipt_long_rounded, size: 16, color: Colors.orange),
                         const SizedBox(width: 6),
-                        const Text('Expenses Breakdown', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        Text(tr(ref, 'expenses_breakdown'), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -621,7 +621,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr(ref, 'close'))),
         ],
       ),
     );
@@ -664,7 +664,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('Weekly Checkup'),
+          title: Text(tr(ref, 'weekly_checkup')),
           content: SizedBox(
             width: 500,
             child: SingleChildScrollView(
@@ -681,7 +681,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('This Week\'s Summary', style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text(tr(ref, 'this_week_summary'), style: TextStyle(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
                         _buildResumeRow('Stock Purchased', CurrencyUtils.format(stockExpenses)),
                         _buildResumeRow('Sales Revenue', CurrencyUtils.format(totalRevenue)),
@@ -695,7 +695,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text('Profit Distribution', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(tr(ref, 'profit_distribution'), style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: payoutController,
@@ -756,7 +756,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(tr(ref, 'cancel')),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -765,7 +765,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                 
                 if (payout + reinject > realizedProfit) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Payout + reinjection cannot exceed available profit')),
+                    SnackBar(content: Text(tr(ref, 'payout_reinject_exceed'))),
                   );
                   return;
                 }
@@ -821,7 +821,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                 if (context.mounted) Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
-              child: const Text('Complete Checkup'),
+              child: Text(tr(ref, 'complete_checkup')),
             ),
           ],
         ),
