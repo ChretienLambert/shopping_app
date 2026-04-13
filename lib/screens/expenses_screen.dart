@@ -12,8 +12,9 @@ import '../providers/expense_provider.dart';
 import '../providers/product_provider.dart';
 import '../providers/sale_provider.dart';
 import '../theme/app_theme.dart';
-import '../widgets/smart_image.dart';
+import '../utils/app_localization.dart';
 import '../utils/currency_utils.dart';
+import '../widgets/smart_image.dart';
 
 class ExpensesScreen extends ConsumerStatefulWidget {
   const ExpensesScreen({super.key});
@@ -99,7 +100,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: ChoiceChip(
-              label: const Text('All'),
+              label: Text(tr(ref, 'all')),
               selected: _selectedFilterCategory == null,
               onSelected: (selected) {
                 setState(() => _selectedFilterCategory = selected ? null : _selectedFilterCategory);
@@ -200,14 +201,14 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Expense?'),
-        content: Text('Are you sure you want to delete "${expense.description}"?'),
+        title: Text('${tr(ref, 'delete')}?'),
+        content: Text('${tr(ref, 'are_you_sure_delete')} "${expense.description}"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr(ref, 'cancel'))),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(tr(ref, 'delete')),
           ),
         ],
       ),
@@ -264,11 +265,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add New Category'),
+        title: Text(tr(ref, 'add_new_category')),
         content: TextField(
           controller: newCategoryController,
-          decoration: const InputDecoration(
-            labelText: 'Category Name',
+          decoration: InputDecoration(
+            labelText: tr(ref, 'category_name'),
             border: OutlineInputBorder(),
           ),
           autofocus: true,
@@ -276,7 +277,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(tr(ref, 'cancel')),
           ),
           ElevatedButton(
             onPressed: () {
@@ -290,7 +291,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
-            child: const Text('Add'),
+            child: Text(tr(ref, 'add')),
           ),
         ],
       ),
@@ -485,11 +486,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                       items: const [
                         DropdownMenuItem(
                           value: 'Second-hand',
-                          child: Text('Second-hand (Thrift)'),
+                          child: Text('Friperie'),
                         ),
                         DropdownMenuItem(
                           value: 'Brand-new',
-                          child: Text('Brand-new (Retail)'),
+                          child: Text('Boutique'),
                         ),
                       ],
                       onChanged: (value) {
@@ -757,7 +758,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
               ),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(tr(ref, 'cancel')),
             ),
             ElevatedButton(
               onPressed: () async {

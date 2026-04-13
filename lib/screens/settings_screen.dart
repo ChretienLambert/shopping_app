@@ -209,7 +209,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
               padding: const EdgeInsets.symmetric(horizontal: 16),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Edit'),
+            child: Text(tr(ref, 'edit')),
           ),
         ],
       ),
@@ -275,7 +275,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
             size: 22,
           ),
         ),
-        title: const Text('Dark Mode', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+        title: Text(tr(ref, 'dark_mode'), style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
         subtitle: Text(isDarkMode ? 'Modern slate theme' : 'Clean indigo theme', style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
         value: isDarkMode,
         activeThumbColor: AppTheme.primaryBlue,
@@ -303,15 +303,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
             color: AppTheme.primaryBlue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(Icons.language, color: AppTheme.primaryBlue, size: 22),
+          child: Icon(Icons.language, color: AppTheme.primaryBlue, size: 22),
         ),
-        title: Text(tr(ref, 'language'), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+        title: Text(tr(ref, 'language'), style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
         trailing: DropdownButton<String>(
           value: lang,
-          underline: const SizedBox.shrink(),
-          items: const [
-            DropdownMenuItem(value: 'en', child: Text('English')),
-            DropdownMenuItem(value: 'fr', child: Text('Francais')),
+          underline: SizedBox.shrink(),
+          items: [
+            DropdownMenuItem(value: 'en', child: Text(tr(ref, 'english'))),
+            DropdownMenuItem(value: 'fr', child: Text(tr(ref, 'french'))),
           ],
           onChanged: (value) {
             if (value != null) {
@@ -350,7 +350,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
         ),
       );
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr(ref, 'error')}: $e')));
     }
   }
 
@@ -372,22 +372,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
         ),
       );
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr(ref, 'error')}: $e')));
     }
   }
 
   Future<void> _handleManualSync(BuildContext context, WidgetRef ref) async {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Row(children: [CircularProgressIndicator(strokeWidth: 2), SizedBox(width: 12), Text('Syncing data...')])),
+      SnackBar(content: Row(children: [CircularProgressIndicator(strokeWidth: 2), SizedBox(width: 12), Text(tr(ref, 'syncing_data'))])),
     );
     try {
       await ref.read(syncManagerProvider).syncAll();
       if (context.mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sync completed successfully!')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(ref, 'sync_completed'))));
       }
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sync failed: $e')));
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr(ref, 'sync_failed')}: $e')));
     }
   }
 
@@ -411,15 +411,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.check_circle_rounded, color: Colors.green),
             SizedBox(width: 12),
-            Text('Success'),
+            Text(tr(ref, 'success')),
           ],
         ),
         content: Text(message),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Great'))],
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(tr(ref, 'great')))],
       ),
     );
   }
@@ -437,14 +437,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
       } else {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No log file found or it is currently being initialized.')),
+            SnackBar(content: Text(tr(ref, 'no_log_file'))),
           );
         }
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sharing logs: $e')),
+          SnackBar(content: Text('${tr(ref, 'error_sharing_logs')}: $e')),
         );
       }
     }
@@ -456,11 +456,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.error_outline_rounded, color: Colors.red),
             SizedBox(width: 12),
-            Text('Connection Failed'),
+            Text(tr(ref, 'connection_failed')),
           ],
         ),
         content: Column(
@@ -477,7 +477,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
             ],
           ],
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Dismiss'))],
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(tr(ref, 'dismiss')))],
       ),
     );
   }
@@ -486,16 +486,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Confirm Full Reset'),
+        title: Text(tr(ref, 'confirm_full_reset')),
         content: const Text(
           'This will erase all your local and cloud data for this account. This action cannot be undone.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr(ref, 'cancel'))),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Wipe Data'),
+            child: Text(tr(ref, 'wipe_data')),
           ),
         ],
       ),
@@ -506,13 +506,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
       await ref.read(maintenanceServiceProvider).completeSystemReset();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('System reset completed.')),
+          SnackBar(content: Text(tr(ref, 'system_reset_completed'))),
         );
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Reset failed: $e')),
+          SnackBar(content: Text('${tr(ref, 'reset_failed')}: $e')),
         );
       }
     }

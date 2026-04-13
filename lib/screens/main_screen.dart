@@ -115,7 +115,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       ),
       error: (error, stack) => Scaffold(
         body: Center(
-          child: Text('Auth Error: $error'),
+          child: Text('${tr(ref, 'error')}: $error'),
         ),
       ),
     );

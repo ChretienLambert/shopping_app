@@ -218,7 +218,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [Icon(Icons.storefront_rounded), SizedBox(width: 8), Text(tr(ref, 'direct_sale'))],
             ),
@@ -226,7 +226,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [Icon(Icons.local_shipping_rounded), SizedBox(width: 8), Text(tr(ref, 'delivery'))],
             ),
@@ -321,11 +321,11 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                     const SizedBox(height: 8),
                     DropdownButtonFormField<double>(
                       initialValue: discountPercent,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Optional Discount',
                         border: OutlineInputBorder(),
                       ),
-                      items: const [
+                      items: [
                         DropdownMenuItem(value: 0, child: Text(tr(ref, 'no_discount'))),
                         DropdownMenuItem(value: 5, child: Text(tr(ref, 'five_percent'))),
                         DropdownMenuItem(value: 10, child: Text(tr(ref, 'ten_percent'))),

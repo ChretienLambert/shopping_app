@@ -5,6 +5,7 @@ import '../providers/expense_provider.dart';
 import '../models/sale.dart';
 import '../models/expense.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_localization.dart';
 
 class TransactionsScreen extends ConsumerStatefulWidget {
   const TransactionsScreen({super.key});
@@ -49,12 +50,12 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                const Text('Filter: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(tr(ref, 'filter'), style: TextStyle(fontWeight: FontWeight.bold)),
                 PopupMenuButton<String>(
                   initialValue: _filter,
                   child: Row(
                     children: [
-                      Text(_filter == 'all' ? 'All' : _filter == 'sales' ? 'Sales Only' : 'Expenses Only'),
+                      Text(_filter == 'all' ? tr(ref, 'all') : _filter == 'sales' ? tr(ref, 'sales_only') : tr(ref, 'expenses_only')),
                       const Icon(Icons.arrow_drop_down),
                     ],
                   ),
@@ -64,9 +65,9 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                     });
                   },
                   itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'all', child: Text('All')),
-                    const PopupMenuItem(value: 'sales', child: Text('Sales Only')),
-                    const PopupMenuItem(value: 'expenses', child: Text('Expenses Only')),
+                    PopupMenuItem(value: 'all', child: Text(tr(ref, 'all'))),
+                    PopupMenuItem(value: 'sales', child: Text(tr(ref, 'sales_only'))),
+                    PopupMenuItem(value: 'expenses', child: Text(tr(ref, 'expenses_only'))),
                   ],
                 ),
               ],

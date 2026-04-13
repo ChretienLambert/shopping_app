@@ -69,9 +69,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                         labelText: tr(ref, 'language'),
                         border: OutlineInputBorder(),
                       ),
-                      items: const [
-                        DropdownMenuItem(value: 'en', child: Text('English')),
-                        DropdownMenuItem(value: 'fr', child: Text('Francais')),
+                      items: [
+                        DropdownMenuItem(value: 'en', child: Text(tr(ref, 'english'))),
+                        DropdownMenuItem(value: 'fr', child: Text(tr(ref, 'french'))),
                       ],
                       onChanged: (value) {
                         if (value != null) {

@@ -8,6 +8,7 @@ import '../providers/product_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/smart_image.dart';
 import '../utils/currency_utils.dart';
+import '../utils/app_localization.dart';
 
 class ProductsScreen extends ConsumerStatefulWidget {
   const ProductsScreen({super.key});

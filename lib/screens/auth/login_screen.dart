@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_localization.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -219,7 +220,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           alignment: Alignment.centerRight,
                           child: TextButton(
                             onPressed: () {},
-                            child: const Text('Forgot Password?'),
+                            child: Text(tr(ref, 'forgot_password')),
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -275,7 +276,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                             child: _isLoading 
                                 ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Text('Development Bypass (Guest Mode)'),
+                                : Text(tr(ref, 'development_bypass')),
                           ),
                         const SizedBox(height: 24),
                         Row(
@@ -292,7 +293,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   MaterialPageRoute(builder: (_) => const RegisterScreen()),
                                 );
                               },
-                              child: const Text('Register'),
+                              child: Text(tr(ref, 'register')),
                             ),
                           ],
                         ),

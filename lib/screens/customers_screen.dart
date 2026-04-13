@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/customer.dart';
 import '../providers/customer_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_localization.dart';
 
 class CustomersScreen extends ConsumerStatefulWidget {
   const CustomersScreen({super.key});
@@ -117,14 +118,14 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Customer?'),
-        content: Text('Are you sure you want to delete ${customer.name}? This will hide them from the active list.'),
+        title: Text('${tr(ref, 'delete')}?'),
+        content: Text('${tr(ref, 'are_you_sure_delete_customer')} ${customer.name}? ${tr(ref, 'hide_from_active')}'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr(ref, 'cancel'))),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(tr(ref, 'delete')),
           ),
         ],
       ),
@@ -211,7 +212,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(tr(ref, 'cancel')),
           ),
           ElevatedButton(
             onPressed: () async {

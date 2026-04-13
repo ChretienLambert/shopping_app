@@ -193,19 +193,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Quick Resume'),
+        title: Text(tr(ref, 'quick_resume')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Available Profit: ${CurrencyUtils.format(profit)}'),
-            Text('Capital Coverage: ${(coverage * 100).toStringAsFixed(1)}%'),
-            Text('Total Revenue: ${CurrencyUtils.format(revenue)}'),
-            Text('Stock Cost: ${CurrencyUtils.format(stockCost)}'),
+            Text('${tr(ref, 'available_profit')}: ${CurrencyUtils.format(profit)}'),
+            Text('${tr(ref, 'capital_coverage')}: ${(coverage * 100).toStringAsFixed(1)}%'),
+            Text('${tr(ref, 'total_revenue')}: ${CurrencyUtils.format(revenue)}'),
+            Text('${tr(ref, 'stock_cost')}: ${CurrencyUtils.format(stockCost)}'),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr(ref, 'close'))),
         ],
       ),
     );

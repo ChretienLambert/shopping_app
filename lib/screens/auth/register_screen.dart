@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_localization.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -59,7 +60,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       await authService.signUp(email, password, name);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Registration successful! Please check your email.')),
+          SnackBar(content: Text(tr(ref, 'registration_success'))),
         );
         Navigator.pop(context);
       }
@@ -252,7 +253,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             ),
                             TextButton(
                               onPressed: () => Navigator.pop(context),
-                              child: const Text('Sign In'),
+                              child: Text(tr(ref, 'sign_in')),
                             ),
                           ],
                         ),
