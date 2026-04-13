@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'isar_service.dart';
 import 'logging_service.dart';
 
@@ -23,15 +24,20 @@ class MaintenanceService {
       
       for (final table in tables) {
         try {
-          // Attempting to delete all rows. 
-          // If RLS is enabled, it will only delete the user's data.
-          // Using a high-range eq/neq to simulate "all"
-          await _supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          // Delete all rows using a bigint-safe filter.
+          await _supabase.from(table).delete().gt('id', -1);
           logger.info('Remote table $table wiped (current user data).');
         } catch (e) {
           logger.error('Failed to wipe remote table $table', e);
         }
       }
+
+      // 3. Reset local app setup/profile state
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('app_setup_completed');
+      await prefs.remove('app_language');
+      await prefs.remove('finance_initial_capital');
+      await prefs.remove('finance_capital_injections');
 
       logger.info('SYSTEM RESET COMPLETED');
     } catch (e) {

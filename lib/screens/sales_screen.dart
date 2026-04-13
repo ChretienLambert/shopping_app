@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:convert';
 import '../models/sale.dart';
 import '../models/sale_item.dart';
 import '../models/customer.dart';
@@ -19,6 +20,8 @@ class SalesScreen extends ConsumerStatefulWidget {
 }
 
 class _SalesScreenState extends ConsumerState<SalesScreen> {
+  String? _validationError;
+
   @override
   Widget build(BuildContext context) {
     final sales = ref.watch(saleProvider);
@@ -83,7 +86,8 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                 color: AppTheme.primaryBlue,
               ),
             ),
-            title: Row(
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   CurrencyUtils.format(sale.totalAmount),
@@ -92,8 +96,11 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                     fontSize: 18,
                   ),
                 ),
-                const Spacer(),
-                _buildStatusBadge(sale),
+                if (sale.operationId != null)
+                  Text(
+                    sale.operationId!,
+                    style: TextStyle(color: AppTheme.slate400, fontSize: 11),
+                  ),
               ],
             ),
             subtitle: Column(
@@ -103,7 +110,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                   children: [
                     Icon(Icons.calendar_today_rounded, size: 12, color: AppTheme.slate500),
                     const SizedBox(width: 4),
-                    Text(_formatDate(sale.saleDate), style: TextStyle(color: AppTheme.slate500)),
+                    Text('${_formatDate(sale.saleDate)} • ${_formatTime(sale.saleDate)}', style: TextStyle(color: AppTheme.slate500)),
                   ],
                 ),
                 if (customer != null)
@@ -117,15 +124,38 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                       ],
                     ),
                   ),
+                if (sale.isDelivery && sale.deliveryAddress != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.location_on_outlined, size: 12, color: AppTheme.slate500),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            sale.deliveryAddress!,
+                            style: TextStyle(color: AppTheme.slate500, fontSize: 11),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (!sale.isLocked)
+                if (sale.isDelivery && sale.lifecycleStatus == SaleLifecycleStatus.pending)
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    onPressed: () => _confirmDelete(sale),
+                    icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.green),
+                    tooltip: 'Confirm Paid',
+                    onPressed: () async {
+                      sale.lifecycleStatus = SaleLifecycleStatus.completed;
+                      sale.isPaid = true;
+                      await ref.read(saleProvider.notifier).updateSale(sale);
+                    },
                   ),
                 Icon(Icons.chevron_right_rounded, color: AppTheme.slate300),
               ],
@@ -137,45 +167,15 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     );
   }
 
-  Future<void> _confirmDelete(Sale sale) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Sale?'),
-        content: const Text('Are you sure you want to delete this sale record? It will be hidden from reports and history.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await ref.read(saleProvider.notifier).deleteSale(sale);
-    }
-  }
-
   Widget _buildStatusBadge(Sale sale) {
     Color color;
-    switch (sale.status.toLowerCase()) {
-      case 'complete':
+    switch (sale.lifecycleStatus) {
+      case SaleLifecycleStatus.completed:
         color = Colors.green;
         break;
-      case 'paid':
-        color = AppTheme.primaryBlue;
-        break;
-      case 'delivered':
-        color = Colors.indigo;
-        break;
-      case 'pending':
+      case SaleLifecycleStatus.pending:
         color = Colors.orange;
         break;
-      default:
-        color = AppTheme.slate500;
     }
 
     return Container(
@@ -200,8 +200,13 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     return '${date.day}/${date.month}/${date.year}';
   }
 
+  String _formatTime(DateTime date) {
+    return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _showSaleDialog() async {
     final products = ref.read(productProvider);
+    final existingSales = ref.read(saleProvider);
     
     // Step 0: Choose Sale Type
     final isDelivery = await showDialog<bool>(
@@ -234,6 +239,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
 
     Customer? selectedCustomer;
     final List<SaleItem> saleItems = [];
+    double discountPercent = 0;
     final notesController = TextEditingController();
     final deliveryAddressController = TextEditingController();
 
@@ -278,6 +284,58 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                       ),
                     ],
                   ),
+                  if (selectedCustomer != null) ...[
+                    const SizedBox(height: 8),
+                    Builder(
+                      builder: (context) {
+                        final stats = _getCustomerLoyaltyStats(
+                          selectedCustomer!.id,
+                          existingSales,
+                        );
+                        if (!stats['isRegular']) {
+                          return const SizedBox.shrink();
+                        }
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.loyalty_rounded, size: 16),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Regular client (${stats['completedSales']} purchases)',
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.green),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<double>(
+                      initialValue: discountPercent,
+                      decoration: const InputDecoration(
+                        labelText: 'Optional Discount',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 0, child: Text('No Discount')),
+                        DropdownMenuItem(value: 5, child: Text('5%')),
+                        DropdownMenuItem(value: 10, child: Text('10%')),
+                        DropdownMenuItem(value: 15, child: Text('15%')),
+                        DropdownMenuItem(value: 20, child: Text('20%')),
+                      ],
+                      onChanged: (value) {
+                        setState(() => discountPercent = value ?? 0);
+                      },
+                    ),
+                  ],
                   if (isDelivery) ...[
                     const SizedBox(height: 16),
                     TextField(
@@ -365,13 +423,49 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                       color: AppTheme.primaryBlue.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Column(
                       children: [
-                        const Text('Grand Total', style: TextStyle(fontWeight: FontWeight.bold)),
-                        Text(
-                          CurrencyUtils.format(saleItems.fold(0.0, (sum, i) => sum + i.totalPrice)),
-                          style: const TextStyle(fontWeight: FontWeight.w900, color: AppTheme.primaryBlue, fontSize: 18),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Subtotal'),
+                            Text(
+                              CurrencyUtils.format(
+                                saleItems.fold(0.0, (sum, i) => sum + i.totalPrice),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (discountPercent > 0) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Discount (${discountPercent.toStringAsFixed(0)}%)'),
+                              Text(
+                                '-${CurrencyUtils.format((saleItems.fold(0.0, (sum, i) => sum + i.totalPrice) * discountPercent) / 100)}',
+                                style: const TextStyle(color: Colors.green),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Grand Total', style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text(
+                              CurrencyUtils.format(
+                                saleItems.fold(0.0, (sum, i) => sum + i.totalPrice) *
+                                    (1 - (discountPercent / 100)),
+                              ),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                color: AppTheme.primaryBlue,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -381,20 +475,62 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
             ),
           ),
           actions: [
+            if (_validationError != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _validationError!,
+                          style: const TextStyle(color: Colors.red, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: saleItems.isEmpty ? null : () async {
+                setState(() => _validationError = null);
+                
+                // Validation: Must select a customer
+                if (selectedCustomer == null) {
+                  setState(() => _validationError = 'Please select a customer for this sale');
+                  return;
+                }
+
+                final subtotal = saleItems.fold(0.0, (sum, i) => sum + i.totalPrice);
+                final discountAmount = subtotal * (discountPercent / 100);
+                final finalTotal = subtotal - discountAmount;
                 final sale = Sale()
                   ..customerId = selectedCustomer?.id ?? 0
-                  ..totalAmount = saleItems.fold(0.0, (sum, i) => sum + i.totalPrice)
+                  ..totalAmount = finalTotal
                   ..notes = notesController.text
                   ..isDelivery = isDelivery
                   ..deliveryAddress = deliveryAddressController.text
-                  ..status = isDelivery ? 'Pending' : 'Complete'
-                  ..isPaid = true;
+                  ..metadataJson = jsonEncode({
+                    'subtotal': subtotal,
+                    'discountPercent': discountPercent,
+                    'discountAmount': discountAmount,
+                  })
+                  ..lifecycleStatus = isDelivery
+                      ? SaleLifecycleStatus.pending
+                      : SaleLifecycleStatus.completed
+                  ..isPaid = !isDelivery;
 
                 await ref.read(saleProvider.notifier).addSale(sale, saleItems);
                 
@@ -492,9 +628,20 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildDetailRow('Date', _formatDate(sale.saleDate)),
+              if (sale.operationId != null)
+                _buildDetailRow('Operation ID', sale.operationId!),
+              _buildDetailRow('Date', '${_formatDate(sale.saleDate)} at ${_formatTime(sale.saleDate)}'),
               _buildDetailRow('Total', CurrencyUtils.format(sale.totalAmount)),
               if (customer != null) _buildDetailRow('Customer', customer.name),
+              _buildDetailRow(
+                'Type',
+                sale.saleType == SaleType.delivery ? 'Delivery' : 'Store',
+              ),
+              _buildDetailRow(
+                'Payment',
+                sale.isPaid ? 'Paid' : 'Pending Payment',
+              ),
+              ..._buildDiscountRows(sale),
               if (sale.isDelivery) ...[
                 _buildDetailRow('Delivery', 'Yes'),
                 if (sale.deliveryAddress != null) _buildDetailRow('Address', sale.deliveryAddress!),
@@ -520,31 +667,16 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
           ),
         ),
         actions: [
-          if (!sale.isLocked)
-             TextButton(
+          if (sale.isDelivery && sale.lifecycleStatus == SaleLifecycleStatus.pending)
+            ElevatedButton.icon(
               onPressed: () async {
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Delete Sale Record?'),
-                    content: const Text('This will remove the sale from your active history. Items will be returned to stock only if you manually adjust them or implement return logic.'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        style: TextButton.styleFrom(foregroundColor: Colors.red),
-                        child: const Text('Delete'),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirmed == true) {
-                  await ref.read(saleProvider.notifier).deleteSale(sale);
-                  if (context.mounted) Navigator.pop(context);
-                }
+                sale.lifecycleStatus = SaleLifecycleStatus.completed;
+                sale.isPaid = true;
+                await ref.read(saleProvider.notifier).updateSale(sale);
+                if (context.mounted) Navigator.pop(context);
               },
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Delete Sale'),
+              icon: const Icon(Icons.check_circle_outline_rounded),
+              label: const Text('Confirm Paid'),
             ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context),
@@ -566,6 +698,33 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
         ],
       ),
     );
+  }
+
+  Map<String, dynamic> _getCustomerLoyaltyStats(int customerId, List<Sale> sales) {
+    final customerSales = sales.where((sale) => sale.customerId == customerId).toList();
+    final completedSales = customerSales.where((sale) => sale.isPaid).length;
+    final totalSpent = customerSales.fold<double>(0, (sum, sale) => sum + sale.totalAmount);
+    return {
+      'completedSales': completedSales,
+      'totalSpent': totalSpent,
+      'isRegular': completedSales >= 3,
+    };
+  }
+
+  List<Widget> _buildDiscountRows(Sale sale) {
+    if (sale.metadataJson == null || sale.metadataJson!.isEmpty) return [];
+    try {
+      final metadata = jsonDecode(sale.metadataJson!) as Map<String, dynamic>;
+      final discountPercent = (metadata['discountPercent'] as num?)?.toDouble() ?? 0;
+      final discountAmount = (metadata['discountAmount'] as num?)?.toDouble() ?? 0;
+      if (discountPercent <= 0) return [];
+      return [
+        _buildDetailRow('Discount', '${discountPercent.toStringAsFixed(0)}%'),
+        _buildDetailRow('Discount Value', CurrencyUtils.format(discountAmount)),
+      ];
+    } catch (_) {
+      return [];
+    }
   }
 }
 

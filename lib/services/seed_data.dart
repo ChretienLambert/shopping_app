@@ -125,56 +125,56 @@ class SeedDataService {
         Expense()
           ..description = 'Facebook Ads Campaign'
           ..amount = 150000.0 // XAF
-          ..category = ExpenseCategory.socialMedia
+          ..category = ExpenseCategory.business
           ..expenseDate = DateTime.now().subtract(const Duration(days: 5))
           ..notes = 'Monthly advertising budget'
           ..receiptImagePath = null,
         Expense()
           ..description = 'Instagram Promoted Posts'
           ..amount = 90000.0 // XAF
-          ..category = ExpenseCategory.socialMedia
+          ..category = ExpenseCategory.business
           ..expenseDate = DateTime.now().subtract(const Duration(days: 3))
           ..notes = 'New collection promotion'
           ..receiptImagePath = null,
         Expense()
           ..description = 'Market Stand Rental'
           ..amount = 300000.0 // XAF
-          ..category = ExpenseCategory.stand
+          ..category = ExpenseCategory.business
           ..expenseDate = DateTime.now().subtract(const Duration(days: 7))
           ..notes = 'Weekend market booth at Douala'
           ..receiptImagePath = null,
         Expense()
           ..description = 'Delivery Vehicle Fuel'
           ..amount = 50000.0 // XAF
-          ..category = ExpenseCategory.transportation
+          ..category = ExpenseCategory.business
           ..expenseDate = DateTime.now().subtract(const Duration(days: 2))
           ..notes = 'Weekly delivery costs'
           ..receiptImagePath = null,
         Expense()
           ..description = 'Packaging Materials'
           ..amount = 75000.0 // XAF
-          ..category = ExpenseCategory.supplies
+          ..category = ExpenseCategory.stock
           ..expenseDate = DateTime.now().subtract(const Duration(days: 10))
           ..notes = 'Bags, tags, and hangers'
           ..receiptImagePath = null,
         Expense()
           ..description = 'Shop Electricity'
           ..amount = 85000.0 // XAF
-          ..category = ExpenseCategory.utilities
+          ..category = ExpenseCategory.business
           ..expenseDate = DateTime.now().subtract(const Duration(days: 15))
           ..notes = 'Monthly utility payment'
           ..receiptImagePath = null,
         Expense()
           ..description = 'Shop Rent'
           ..amount = 500000.0 // XAF
-          ..category = ExpenseCategory.rent
+          ..category = ExpenseCategory.business
           ..expenseDate = DateTime.now().subtract(const Duration(days: 20))
           ..notes = 'Monthly rent payment'
           ..receiptImagePath = null,
         Expense()
           ..description = 'Radio Advertisement'
           ..amount = 200000.0 // XAF
-          ..category = ExpenseCategory.marketing
+          ..category = ExpenseCategory.business
           ..expenseDate = DateTime.now().subtract(const Duration(days: 8))
           ..notes = 'Weekly radio spot'
           ..receiptImagePath = null,

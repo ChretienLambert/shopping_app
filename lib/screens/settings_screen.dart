@@ -12,8 +12,11 @@ import '../providers/customer_provider.dart';
 import '../providers/sale_provider.dart';
 import '../providers/expense_provider.dart';
 import '../providers/sync_provider.dart';
+import '../providers/maintenance_provider.dart';
+import '../providers/language_provider.dart';
 import '../services/logging_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_localization.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -54,7 +57,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: Text(tr(ref, 'settings')),
         elevation: 0,
       ),
       body: FadeTransition(
@@ -107,10 +110,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
               onTap: () => _shareLogFile(context),
               trailing: const Icon(Icons.share_rounded, size: 20),
             ),
+            _buildSettingTile(
+              icon: Icons.delete_forever_rounded,
+              title: 'Wipe All Data (Start New)',
+              subtitle: 'Deletes local and cloud data for this account',
+              onTap: () => _confirmSystemReset(context, ref),
+              destructive: true,
+            ),
             const SizedBox(height: 32),
 
             // App Settings Section
             _buildSectionHeader('App Settings'),
+            _buildLanguageTile(),
             _buildThemeTile(isDarkMode),
             const SizedBox(height: 32),
 
@@ -275,6 +286,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
     );
   }
 
+  Widget _buildLanguageTile() {
+    final lang = ref.watch(languageProvider);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.05)),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.language, color: AppTheme.primaryBlue, size: 22),
+        ),
+        title: Text(tr(ref, 'language'), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+        trailing: DropdownButton<String>(
+          value: lang,
+          underline: const SizedBox.shrink(),
+          items: const [
+            DropdownMenuItem(value: 'en', child: Text('English')),
+            DropdownMenuItem(value: 'fr', child: Text('Francais')),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              ref.read(languageProvider.notifier).setLanguage(value);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
   // Implementation of actions (Export, Reset, etc.) copied and adapted from ExportScreen
   Future<void> _exportAllData(BuildContext context, WidgetRef ref) async {
     final products = ref.read(productProvider);
@@ -295,7 +343,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
       final file = File('${directory.path}/shop_backup_${DateTime.now().millisecondsSinceEpoch}.json');
       await file.writeAsString(jsonEncode(data));
       
-      await Share.shareXFiles([XFile(file.path)], subject: 'ShopTrack Backup');
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          subject: 'ShopTrack Backup',
+        ),
+      );
     } catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
@@ -312,7 +365,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
       final directory = await getTemporaryDirectory();
       final file = File('${directory.path}/inventory_${DateTime.now().millisecondsSinceEpoch}.csv');
       await file.writeAsString(csvData);
-      await Share.shareXFiles([XFile(file.path)], subject: 'Inventory CSV');
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          subject: 'Inventory CSV',
+        ),
+      );
     } catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
@@ -370,9 +428,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
     try {
       final logFile = logger.logFile;
       if (logFile != null && await logFile.exists()) {
-        await Share.shareXFiles(
-          [XFile(logFile.path)],
-          subject: 'ShopTrack App Logs - ${DateTime.now()}',
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(logFile.path)],
+            subject: 'ShopTrack App Logs - ${DateTime.now()}',
+          ),
         );
       } else {
         if (context.mounted) {
@@ -420,5 +480,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Dismiss'))],
       ),
     );
+  }
+
+  Future<void> _confirmSystemReset(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Full Reset'),
+        content: const Text(
+          'This will erase all your local and cloud data for this account. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Wipe Data'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(maintenanceServiceProvider).completeSystemReset();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('System reset completed.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Reset failed: $e')),
+        );
+      }
+    }
   }
 }

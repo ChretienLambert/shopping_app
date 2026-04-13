@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
+import '../models/expense.dart';
 import '../models/product.dart';
+import '../providers/expense_provider.dart';
 import '../providers/product_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/smart_image.dart';
@@ -16,45 +17,53 @@ class ProductsScreen extends ConsumerStatefulWidget {
 }
 
 class _ProductsScreenState extends ConsumerState<ProductsScreen> {
-  final ImagePicker _imagePicker = ImagePicker();
+  final List<String> _productCategories = ['Dress', 'Blouse', 'Trouser', 'Set', 'Jacket', 'Skirt', 'Shirt', 'Pants', 'Other'];
+  String? _selectedFilterCategory;
 
   @override
   Widget build(BuildContext context) {
     final products = ref.watch(productProvider);
+    final expenses = ref.watch(expenseProvider);
+    final filteredProducts = _selectedFilterCategory == null
+        ? products
+        : products.where((p) => p.productType == _selectedFilterCategory).toList();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Inventory'),
+        title: const Text('Catalogs'),
         backgroundColor: Colors.transparent,
       ),
-      body: products.isEmpty
-          ? _buildEmptyState()
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.maxWidth;
-                final crossAxisCount = width > 1200 ? 5 : width > 800 ? 3 : 2;
-                
-                return GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    childAspectRatio: 0.72,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
+      body: Column(
+        children: [
+          _buildCategoryFilter(),
+          Expanded(
+            child: filteredProducts.isEmpty
+                ? _buildEmptyState()
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final width = constraints.maxWidth;
+                      final crossAxisCount = width > 1200 ? 4 : width > 800 ? 3 : 2;
+                      
+                      return GridView.builder(
+                        padding: const EdgeInsets.all(16),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          childAspectRatio: 0.62,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                        itemCount: filteredProducts.length,
+                        itemBuilder: (context, index) {
+                          final product = filteredProducts[index];
+                          return _buildProductGridItem(product, expenses);
+                        },
+                      );
+                    },
                   ),
-                  itemCount: products.length,
-                  itemBuilder: (context, index) {
-                    final product = products[index];
-                    return _buildProductGridItem(product);
-                  },
-                );
-              },
-            ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showProductDialog(),
-        backgroundColor: AppTheme.primaryBlue,
-        child: const Icon(Icons.add, color: Colors.white),
+          ),
+        ],
       ),
+      floatingActionButton: null,
     );
   }
 
@@ -66,7 +75,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
           Icon(Icons.inventory_2_outlined, size: 64, color: AppTheme.slate300),
           const SizedBox(height: 16),
           Text(
-            'No products yet',
+            _selectedFilterCategory == null ? 'No catalogs yet' : 'No catalogs in this category',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   color: AppTheme.slate600,
                   fontWeight: FontWeight.bold,
@@ -74,7 +83,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Tap + to add your first product',
+            _selectedFilterCategory == null ? 'Add stock expenses to create catalogs' : 'Select a different category',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: AppTheme.slate500,
                 ),
@@ -84,7 +93,57 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     );
   }
 
-  Widget _buildProductGridItem(Product product) {
+  Widget _buildCategoryFilter() {
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: const Text('All'),
+              selected: _selectedFilterCategory == null,
+              onSelected: (selected) {
+                setState(() => _selectedFilterCategory = selected ? null : _selectedFilterCategory);
+              },
+            ),
+          ),
+          ..._productCategories.map((category) {
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(category),
+                selected: _selectedFilterCategory == category,
+                onSelected: (selected) {
+                  setState(() => _selectedFilterCategory = selected ? category : null);
+                },
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductGridItem(Product product, List<Expense> expenses) {
+    // Find last refill date from stock expenses
+    DateTime? lastRefillDate;
+    final stockExpenses = expenses
+        .where((e) => 
+            e.category == ExpenseCategory.stock &&
+            e.stockProductName == product.name &&
+            e.stockProductType == product.productType &&
+            e.stockQuality == product.quality)
+        .toList();
+    
+    if (stockExpenses.isNotEmpty) {
+      stockExpenses.sort((a, b) => b.expenseDate.compareTo(a.expenseDate));
+      lastRefillDate = stockExpenses.first.expenseDate;
+    }
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -122,32 +181,46 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                 ),
               ),
               Expanded(
-                flex: 2,
+                flex: 3,
                 child: Padding(
                   padding: const EdgeInsets.all(10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              product.name,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
-                            onPressed: () => _confirmDelete(product),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        ],
+                      Text(
+                        product.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Category: ${product.productType ?? "Not set"}',
+                        style: TextStyle(color: AppTheme.slate500, fontSize: 11),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        'Condition: ${product.quality ?? "Not set"}',
+                        style: TextStyle(color: AppTheme.slate500, fontSize: 11),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (lastRefillDate != null)
+                        Text(
+                          'Last refill: ${_formatDate(lastRefillDate)}',
+                          style: TextStyle(color: AppTheme.primaryBlue.withValues(alpha: 0.7), fontSize: 10, fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      const SizedBox(height: 6),
+                      Text(
+                        product.description,
+                        style: TextStyle(color: AppTheme.slate600, fontSize: 11),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const Spacer(),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -183,6 +256,10 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     );
   }
 
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
   Widget _buildStockBadge(int stock) {
     final color = stock == 0 ? Colors.red : Colors.orange;
     return Container(
@@ -199,28 +276,6 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     );
   }
 
-  Future<void> _confirmDelete(Product product) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Product?'),
-        content: Text('Are you sure you want to delete ${product.name}? This will hide it from the storefront.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await ref.read(productProvider.notifier).deleteProduct(product);
-    }
-  }
-
   Future<void> _showProductDialog({Product? product}) async {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController(text: product?.name ?? '');
@@ -235,45 +290,32 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text(product == null ? 'Add Product' : 'Edit Product'),
+          title: const Text('Update Price and Stock'),
           content: Form(
             key: formKey,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  GestureDetector(
-                    onTap: () async {
-                      final pickedFile = await _imagePicker.pickImage(
-                        source: ImageSource.gallery,
-                        maxWidth: 800,
-                        maxHeight: 800,
-                      );
-                      if (pickedFile != null && mounted) {
-                        setState(() {
-                          imagePath = pickedFile.path;
-                        });
-                      }
-                    },
-                    child: SmartImage(
-                      imagePath: imagePath,
-                      width: 120,
-                      height: 120,
-                      borderRadius: 12,
-                    ),
+                  SmartImage(
+                    imagePath: imagePath,
+                    width: 120,
+                    height: 120,
+                    borderRadius: 12,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: nameController,
+                    readOnly: true,
                     decoration: const InputDecoration(
-                      labelText: 'Product Name *',
+                      labelText: 'Product Name',
                       border: OutlineInputBorder(),
                     ),
-                    validator: (value) => value == null || value.isEmpty ? 'Required' : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: descriptionController,
+                    readOnly: true,
                     decoration: const InputDecoration(
                       labelText: 'Description',
                       border: OutlineInputBorder(),
@@ -322,20 +364,20 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                     ..stockQuantity = int.tryParse(stockController.text) ?? 0
                     ..imagePath = imagePath;
 
-                  if (product != null) {
-                    newProduct.id = product.id;
-                    newProduct.serverId = product.serverId;
-                    await ref.read(productProvider.notifier).updateProduct(newProduct);
-                  } else {
-                    await ref.read(productProvider.notifier).addProduct(newProduct);
-                  }
+                  if (product == null) return;
+                  newProduct.id = product.id;
+                  newProduct.serverId = product.serverId;
+                  newProduct.purchasePrice = product.purchasePrice;
+                  newProduct.productType = product.productType;
+                  newProduct.quality = product.quality;
+                  await ref.read(productProvider.notifier).updateProduct(newProduct);
 
                   if (!context.mounted) return;
                   Navigator.pop(context);
                 }
               },
               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
-              child: Text(product == null ? 'Add' : 'Update'),
+              child: const Text('Update'),
             ),
           ],
         ),

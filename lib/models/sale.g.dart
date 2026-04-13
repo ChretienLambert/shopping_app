@@ -67,33 +67,38 @@ const SaleSchema = CollectionSchema(
       name: r'notes',
       type: IsarType.string,
     ),
-    r'saleDate': PropertySchema(
+    r'operationId': PropertySchema(
       id: 10,
+      name: r'operationId',
+      type: IsarType.string,
+    ),
+    r'saleDate': PropertySchema(
+      id: 11,
       name: r'saleDate',
       type: IsarType.dateTime,
     ),
     r'serverId': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'serverId',
       type: IsarType.string,
     ),
     r'status': PropertySchema(
-      id: 12,
+      id: 13,
       name: r'status',
       type: IsarType.string,
     ),
     r'totalAmount': PropertySchema(
-      id: 13,
+      id: 14,
       name: r'totalAmount',
       type: IsarType.double,
     ),
     r'updatedAt': PropertySchema(
-      id: 14,
+      id: 15,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
     r'userId': PropertySchema(
-      id: 15,
+      id: 16,
       name: r'userId',
       type: IsarType.long,
     )
@@ -294,6 +299,12 @@ int _saleEstimateSize(
     }
   }
   {
+    final value = object.operationId;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
     final value = object.serverId;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
@@ -319,12 +330,13 @@ void _saleSerialize(
   writer.writeDateTime(offsets[7], object.lastSyncedAt);
   writer.writeString(offsets[8], object.metadataJson);
   writer.writeString(offsets[9], object.notes);
-  writer.writeDateTime(offsets[10], object.saleDate);
-  writer.writeString(offsets[11], object.serverId);
-  writer.writeString(offsets[12], object.status);
-  writer.writeDouble(offsets[13], object.totalAmount);
-  writer.writeDateTime(offsets[14], object.updatedAt);
-  writer.writeLong(offsets[15], object.userId);
+  writer.writeString(offsets[10], object.operationId);
+  writer.writeDateTime(offsets[11], object.saleDate);
+  writer.writeString(offsets[12], object.serverId);
+  writer.writeString(offsets[13], object.status);
+  writer.writeDouble(offsets[14], object.totalAmount);
+  writer.writeDateTime(offsets[15], object.updatedAt);
+  writer.writeLong(offsets[16], object.userId);
 }
 
 Sale _saleDeserialize(
@@ -345,12 +357,13 @@ Sale _saleDeserialize(
   object.lastSyncedAt = reader.readDateTimeOrNull(offsets[7]);
   object.metadataJson = reader.readStringOrNull(offsets[8]);
   object.notes = reader.readStringOrNull(offsets[9]);
-  object.saleDate = reader.readDateTime(offsets[10]);
-  object.serverId = reader.readStringOrNull(offsets[11]);
-  object.status = reader.readString(offsets[12]);
-  object.totalAmount = reader.readDouble(offsets[13]);
-  object.updatedAt = reader.readDateTime(offsets[14]);
-  object.userId = reader.readLongOrNull(offsets[15]);
+  object.operationId = reader.readStringOrNull(offsets[10]);
+  object.saleDate = reader.readDateTime(offsets[11]);
+  object.serverId = reader.readStringOrNull(offsets[12]);
+  object.status = reader.readString(offsets[13]);
+  object.totalAmount = reader.readDouble(offsets[14]);
+  object.updatedAt = reader.readDateTime(offsets[15]);
+  object.userId = reader.readLongOrNull(offsets[16]);
   return object;
 }
 
@@ -382,16 +395,18 @@ P _saleDeserializeProp<P>(
     case 9:
       return (reader.readStringOrNull(offset)) as P;
     case 10:
-      return (reader.readDateTime(offset)) as P;
-    case 11:
       return (reader.readStringOrNull(offset)) as P;
-    case 12:
-      return (reader.readString(offset)) as P;
-    case 13:
-      return (reader.readDouble(offset)) as P;
-    case 14:
+    case 11:
       return (reader.readDateTime(offset)) as P;
+    case 12:
+      return (reader.readStringOrNull(offset)) as P;
+    case 13:
+      return (reader.readString(offset)) as P;
+    case 14:
+      return (reader.readDouble(offset)) as P;
     case 15:
+      return (reader.readDateTime(offset)) as P;
+    case 16:
       return (reader.readLongOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -2286,6 +2301,152 @@ extension SaleQueryFilter on QueryBuilder<Sale, Sale, QFilterCondition> {
     });
   }
 
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> operationIdIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'operationId',
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> operationIdIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'operationId',
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> operationIdEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'operationId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> operationIdGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'operationId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> operationIdLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'operationId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> operationIdBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'operationId',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> operationIdStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'operationId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> operationIdEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'operationId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> operationIdContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'operationId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> operationIdMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'operationId',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> operationIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'operationId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterFilterCondition> operationIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'operationId',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<Sale, Sale, QAfterFilterCondition> saleDateEqualTo(
       DateTime value) {
     return QueryBuilder.apply(this, (query) {
@@ -2921,6 +3082,18 @@ extension SaleQuerySortBy on QueryBuilder<Sale, Sale, QSortBy> {
     });
   }
 
+  QueryBuilder<Sale, Sale, QAfterSortBy> sortByOperationId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'operationId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterSortBy> sortByOperationIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'operationId', Sort.desc);
+    });
+  }
+
   QueryBuilder<Sale, Sale, QAfterSortBy> sortBySaleDate() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'saleDate', Sort.asc);
@@ -3127,6 +3300,18 @@ extension SaleQuerySortThenBy on QueryBuilder<Sale, Sale, QSortThenBy> {
     });
   }
 
+  QueryBuilder<Sale, Sale, QAfterSortBy> thenByOperationId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'operationId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Sale, Sale, QAfterSortBy> thenByOperationIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'operationId', Sort.desc);
+    });
+  }
+
   QueryBuilder<Sale, Sale, QAfterSortBy> thenBySaleDate() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'saleDate', Sort.asc);
@@ -3265,6 +3450,13 @@ extension SaleQueryWhereDistinct on QueryBuilder<Sale, Sale, QDistinct> {
     });
   }
 
+  QueryBuilder<Sale, Sale, QDistinct> distinctByOperationId(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'operationId', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<Sale, Sale, QDistinct> distinctBySaleDate() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'saleDate');
@@ -3368,6 +3560,12 @@ extension SaleQueryProperty on QueryBuilder<Sale, Sale, QQueryProperty> {
   QueryBuilder<Sale, String?, QQueryOperations> notesProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'notes');
+    });
+  }
+
+  QueryBuilder<Sale, String?, QQueryOperations> operationIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'operationId');
     });
   }
 

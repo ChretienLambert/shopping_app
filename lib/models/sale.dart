@@ -3,6 +3,10 @@ import 'package:uuid/uuid.dart';
 
 part 'sale.g.dart';
 
+enum SaleType { store, delivery }
+
+enum SaleLifecycleStatus { pending, completed }
+
 @collection
 class Sale {
   Id id = Isar.autoIncrement;
@@ -41,6 +45,8 @@ class Sale {
   @Index()
   DateTime? deletedAt;
 
+  String? operationId; // Unique operation ID (e.g., S####)
+
   @Index()
   bool isDelivery = false;
 
@@ -53,12 +59,38 @@ class Sale {
   String? deliveryAddress;
 
   @ignore
-  bool get isLocked => (status == 'Delivered' || status == 'Complete') && isPaid;
+  SaleType get saleType => isDelivery ? SaleType.delivery : SaleType.store;
+
+  set saleType(SaleType value) {
+    isDelivery = value == SaleType.delivery;
+  }
+
+  @ignore
+  SaleLifecycleStatus get lifecycleStatus {
+    final normalized = status.toLowerCase();
+    return normalized == 'pending'
+        ? SaleLifecycleStatus.pending
+        : SaleLifecycleStatus.completed;
+  }
+
+  set lifecycleStatus(SaleLifecycleStatus value) {
+    status = value == SaleLifecycleStatus.pending ? 'Pending' : 'Complete';
+  }
+
+  @ignore
+  bool get isLocked => lifecycleStatus == SaleLifecycleStatus.completed && isPaid;
   
   Sale() {
     serverId = const Uuid().v4();
     saleDate = DateTime.now();
     createdAt = DateTime.now();
     updatedAt = DateTime.now();
+    operationId = _generateOperationId();
+  }
+
+  static String _generateOperationId() {
+    final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final random = (timestamp % 10000).toString().padLeft(4, '0');
+    return 'S$random';
   }
 }

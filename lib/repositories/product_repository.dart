@@ -41,8 +41,11 @@ class ProductRepository {
         'name': product.name,
         'description': product.description,
         'price': product.price,
+        'purchase_price': product.purchasePrice,
         'stock_quantity': product.stockQuantity,
         'image_path': product.imagePath,
+        'product_type': product.productType,
+        'quality': product.quality,
         'deleted_at': product.deletedAt?.toIso8601String(),
         'updated_at': product.updatedAt.toIso8601String(),
       };
@@ -106,8 +109,11 @@ class ProductRepository {
           product.name = data['name'];
           product.description = data['description'];
           product.price = (data['price'] as num).toDouble();
+          product.purchasePrice = ((data['purchase_price'] ?? 0) as num).toDouble();
           product.stockQuantity = data['stock_quantity'];
           product.imagePath = data['image_path'];
+          product.productType = data['product_type'];
+          product.quality = data['quality'];
           product.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
           product.createdAt = DateTime.parse(data['created_at']);
           product.updatedAt = DateTime.parse(data['updated_at']);

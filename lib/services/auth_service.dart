@@ -30,8 +30,10 @@ class AuthService {
   Future<supabase.AuthResponse> signIn(String email, String password) async {
     logger.info('Attempting sign in for $email');
     
-    final connectivity = await Connectivity().checkConnectivity();
-    final isOnline = connectivity != ConnectivityResult.none;
+    final connectivityResults = await Connectivity().checkConnectivity();
+    final isOnline = connectivityResults.any(
+      (result) => result != ConnectivityResult.none,
+    );
 
     if (isOnline) {
       try {

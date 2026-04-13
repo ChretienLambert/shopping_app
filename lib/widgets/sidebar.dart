@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
+import '../providers/language_provider.dart';
+import '../utils/app_localization.dart';
 
 class Sidebar extends ConsumerWidget {
   final int selectedIndex;
@@ -68,7 +70,7 @@ class Sidebar extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'ShopTrack',
+                              'Corporate Ladies',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -97,7 +99,7 @@ class Sidebar extends ConsumerWidget {
                   context,
                   icon: Icons.dashboard_outlined,
                   selectedIcon: Icons.dashboard,
-                  label: 'Dashboard',
+                  label: tr(ref, 'dashboard'),
                   index: 0,
                   isSelected: selectedIndex == 0,
                   isSmallScreen: isSmallScreen,
@@ -106,7 +108,7 @@ class Sidebar extends ConsumerWidget {
                   context,
                   icon: Icons.inventory_2_outlined,
                   selectedIcon: Icons.inventory_2,
-                  label: 'Products',
+                  label: tr(ref, 'catalogs'),
                   index: 1,
                   isSelected: selectedIndex == 1,
                   isSmallScreen: isSmallScreen,
@@ -115,7 +117,7 @@ class Sidebar extends ConsumerWidget {
                   context,
                   icon: Icons.people_outline,
                   selectedIcon: Icons.people,
-                  label: 'Customers',
+                  label: tr(ref, 'customers'),
                   index: 2,
                   isSelected: selectedIndex == 2,
                   isSmallScreen: isSmallScreen,
@@ -124,7 +126,7 @@ class Sidebar extends ConsumerWidget {
                   context,
                   icon: Icons.shopping_cart_outlined,
                   selectedIcon: Icons.shopping_cart,
-                  label: 'Sales',
+                  label: tr(ref, 'sales'),
                   index: 3,
                   isSelected: selectedIndex == 3,
                   isSmallScreen: isSmallScreen,
@@ -133,7 +135,7 @@ class Sidebar extends ConsumerWidget {
                   context,
                   icon: Icons.receipt_long_outlined,
                   selectedIcon: Icons.receipt_long,
-                  label: 'Expenses',
+                  label: tr(ref, 'expenses'),
                   index: 4,
                   isSelected: selectedIndex == 4,
                   isSmallScreen: isSmallScreen,
@@ -142,7 +144,7 @@ class Sidebar extends ConsumerWidget {
                   context,
                   icon: Icons.account_balance_outlined,
                   selectedIcon: Icons.account_balance,
-                  label: 'Finance',
+                  label: tr(ref, 'finance'),
                   index: 5,
                   isSelected: selectedIndex == 5,
                   isSmallScreen: isSmallScreen,
@@ -171,8 +173,8 @@ class Sidebar extends ConsumerWidget {
                         size: 20,
                       ),
                       const SizedBox(width: 12),
-                      const Text(
-                        'Dark Mode',
+                      Text(
+                        tr(ref, 'dark_mode'),
                         style: TextStyle(fontSize: 14),
                       ),
                       const Spacer(),
@@ -225,9 +227,18 @@ class Sidebar extends ConsumerWidget {
                     ),
                   ),
                   IconButton(
+                    icon: const Icon(Icons.language, size: 18),
+                    onPressed: () async {
+                      final currentLang = ref.read(languageProvider);
+                      final newLang = currentLang == 'en' ? 'fr' : 'en';
+                      await ref.read(languageProvider.notifier).setLanguage(newLang);
+                    },
+                    tooltip: tr(ref, 'language'),
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.logout, size: 18),
                     onPressed: () => ref.read(authServiceProvider).signOut(),
-                    tooltip: 'Logout',
+                    tooltip: tr(ref, 'logout'),
                   ),
                 ],
               ],

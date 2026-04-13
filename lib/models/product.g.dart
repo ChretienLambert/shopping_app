@@ -57,18 +57,33 @@ const ProductSchema = CollectionSchema(
       name: r'price',
       type: IsarType.double,
     ),
-    r'serverId': PropertySchema(
+    r'productType': PropertySchema(
       id: 8,
+      name: r'productType',
+      type: IsarType.string,
+    ),
+    r'purchasePrice': PropertySchema(
+      id: 9,
+      name: r'purchasePrice',
+      type: IsarType.double,
+    ),
+    r'quality': PropertySchema(
+      id: 10,
+      name: r'quality',
+      type: IsarType.string,
+    ),
+    r'serverId': PropertySchema(
+      id: 11,
       name: r'serverId',
       type: IsarType.string,
     ),
     r'stockQuantity': PropertySchema(
-      id: 9,
+      id: 12,
       name: r'stockQuantity',
       type: IsarType.long,
     ),
     r'updatedAt': PropertySchema(
-      id: 10,
+      id: 13,
       name: r'updatedAt',
       type: IsarType.dateTime,
     )
@@ -113,6 +128,19 @@ const ProductSchema = CollectionSchema(
       properties: [
         IndexPropertySchema(
           name: r'price',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
+    ),
+    r'purchasePrice': IndexSchema(
+      id: 785839757853820780,
+      name: r'purchasePrice',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'purchasePrice',
           type: IndexType.value,
           caseSensitive: false,
         )
@@ -194,6 +222,18 @@ int _productEstimateSize(
   }
   bytesCount += 3 + object.name.length * 3;
   {
+    final value = object.productType;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.quality;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
     final value = object.serverId;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
@@ -216,9 +256,12 @@ void _productSerialize(
   writer.writeDateTime(offsets[5], object.lastSyncedAt);
   writer.writeString(offsets[6], object.name);
   writer.writeDouble(offsets[7], object.price);
-  writer.writeString(offsets[8], object.serverId);
-  writer.writeLong(offsets[9], object.stockQuantity);
-  writer.writeDateTime(offsets[10], object.updatedAt);
+  writer.writeString(offsets[8], object.productType);
+  writer.writeDouble(offsets[9], object.purchasePrice);
+  writer.writeString(offsets[10], object.quality);
+  writer.writeString(offsets[11], object.serverId);
+  writer.writeLong(offsets[12], object.stockQuantity);
+  writer.writeDateTime(offsets[13], object.updatedAt);
 }
 
 Product _productDeserialize(
@@ -237,9 +280,12 @@ Product _productDeserialize(
   object.lastSyncedAt = reader.readDateTimeOrNull(offsets[5]);
   object.name = reader.readString(offsets[6]);
   object.price = reader.readDouble(offsets[7]);
-  object.serverId = reader.readStringOrNull(offsets[8]);
-  object.stockQuantity = reader.readLong(offsets[9]);
-  object.updatedAt = reader.readDateTime(offsets[10]);
+  object.productType = reader.readStringOrNull(offsets[8]);
+  object.purchasePrice = reader.readDouble(offsets[9]);
+  object.quality = reader.readStringOrNull(offsets[10]);
+  object.serverId = reader.readStringOrNull(offsets[11]);
+  object.stockQuantity = reader.readLong(offsets[12]);
+  object.updatedAt = reader.readDateTime(offsets[13]);
   return object;
 }
 
@@ -269,8 +315,14 @@ P _productDeserializeProp<P>(
     case 8:
       return (reader.readStringOrNull(offset)) as P;
     case 9:
-      return (reader.readLong(offset)) as P;
+      return (reader.readDouble(offset)) as P;
     case 10:
+      return (reader.readStringOrNull(offset)) as P;
+    case 11:
+      return (reader.readStringOrNull(offset)) as P;
+    case 12:
+      return (reader.readLong(offset)) as P;
+    case 13:
       return (reader.readDateTime(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -363,6 +415,14 @@ extension ProductQueryWhereSort on QueryBuilder<Product, Product, QWhere> {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         const IndexWhereClause.any(indexName: r'price'),
+      );
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterWhere> anyPurchasePrice() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'purchasePrice'),
       );
     });
   }
@@ -660,6 +720,96 @@ extension ProductQueryWhere on QueryBuilder<Product, Product, QWhereClause> {
         lower: [lowerPrice],
         includeLower: includeLower,
         upper: [upperPrice],
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterWhereClause> purchasePriceEqualTo(
+      double purchasePrice) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'purchasePrice',
+        value: [purchasePrice],
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterWhereClause> purchasePriceNotEqualTo(
+      double purchasePrice) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'purchasePrice',
+              lower: [],
+              upper: [purchasePrice],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'purchasePrice',
+              lower: [purchasePrice],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'purchasePrice',
+              lower: [purchasePrice],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'purchasePrice',
+              lower: [],
+              upper: [purchasePrice],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterWhereClause> purchasePriceGreaterThan(
+    double purchasePrice, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'purchasePrice',
+        lower: [purchasePrice],
+        includeLower: include,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterWhereClause> purchasePriceLessThan(
+    double purchasePrice, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'purchasePrice',
+        lower: [],
+        upper: [purchasePrice],
+        includeUpper: include,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterWhereClause> purchasePriceBetween(
+    double lowerPurchasePrice,
+    double upperPurchasePrice, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'purchasePrice',
+        lower: [lowerPurchasePrice],
+        includeLower: includeLower,
+        upper: [upperPurchasePrice],
         includeUpper: includeUpper,
       ));
     });
@@ -1771,6 +1921,362 @@ extension ProductQueryFilter
     });
   }
 
+  QueryBuilder<Product, Product, QAfterFilterCondition> productTypeIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'productType',
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> productTypeIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'productType',
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> productTypeEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'productType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> productTypeGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'productType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> productTypeLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'productType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> productTypeBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'productType',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> productTypeStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'productType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> productTypeEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'productType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> productTypeContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'productType',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> productTypeMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'productType',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> productTypeIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'productType',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      productTypeIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'productType',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> purchasePriceEqualTo(
+    double value, {
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'purchasePrice',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition>
+      purchasePriceGreaterThan(
+    double value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'purchasePrice',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> purchasePriceLessThan(
+    double value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'purchasePrice',
+        value: value,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> purchasePriceBetween(
+    double lower,
+    double upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'purchasePrice',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        epsilon: epsilon,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> qualityIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'quality',
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> qualityIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'quality',
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> qualityEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'quality',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> qualityGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'quality',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> qualityLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'quality',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> qualityBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'quality',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> qualityStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'quality',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> qualityEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'quality',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> qualityContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'quality',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> qualityMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'quality',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> qualityIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'quality',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterFilterCondition> qualityIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'quality',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<Product, Product, QAfterFilterCondition> serverIdIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNull(
@@ -2128,6 +2634,42 @@ extension ProductQuerySortBy on QueryBuilder<Product, Product, QSortBy> {
     });
   }
 
+  QueryBuilder<Product, Product, QAfterSortBy> sortByProductType() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'productType', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> sortByProductTypeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'productType', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> sortByPurchasePrice() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'purchasePrice', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> sortByPurchasePriceDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'purchasePrice', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> sortByQuality() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'quality', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> sortByQualityDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'quality', Sort.desc);
+    });
+  }
+
   QueryBuilder<Product, Product, QAfterSortBy> sortByServerId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'serverId', Sort.asc);
@@ -2275,6 +2817,42 @@ extension ProductQuerySortThenBy
     });
   }
 
+  QueryBuilder<Product, Product, QAfterSortBy> thenByProductType() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'productType', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> thenByProductTypeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'productType', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> thenByPurchasePrice() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'purchasePrice', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> thenByPurchasePriceDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'purchasePrice', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> thenByQuality() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'quality', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Product, Product, QAfterSortBy> thenByQualityDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'quality', Sort.desc);
+    });
+  }
+
   QueryBuilder<Product, Product, QAfterSortBy> thenByServerId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'serverId', Sort.asc);
@@ -2365,6 +2943,26 @@ extension ProductQueryWhereDistinct
     });
   }
 
+  QueryBuilder<Product, Product, QDistinct> distinctByProductType(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'productType', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<Product, Product, QDistinct> distinctByPurchasePrice() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'purchasePrice');
+    });
+  }
+
+  QueryBuilder<Product, Product, QDistinct> distinctByQuality(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'quality', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<Product, Product, QDistinct> distinctByServerId(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -2438,6 +3036,24 @@ extension ProductQueryProperty
   QueryBuilder<Product, double, QQueryOperations> priceProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'price');
+    });
+  }
+
+  QueryBuilder<Product, String?, QQueryOperations> productTypeProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'productType');
+    });
+  }
+
+  QueryBuilder<Product, double, QQueryOperations> purchasePriceProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'purchasePrice');
+    });
+  }
+
+  QueryBuilder<Product, String?, QQueryOperations> qualityProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'quality');
     });
   }
 

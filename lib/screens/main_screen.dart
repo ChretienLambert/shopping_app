@@ -19,6 +19,7 @@ import '../services/logging_service.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
 import 'dart:io';
+import '../utils/app_localization.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
@@ -30,6 +31,9 @@ class MainScreen extends ConsumerStatefulWidget {
 class _MainScreenState extends ConsumerState<MainScreen> {
   int _selectedIndex = 0;
   bool _isOnline = true;
+  Future<void>? _initialSyncFuture;
+  bool _initialSyncChecked = false;
+  bool _needsInitialSync = false;
 
   @override
   void initState() {
@@ -43,8 +47,9 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 
   Future<void> _performConnectionCheck() async {
     try {
-      final result = await Connectivity().checkConnectivity();
-      bool online = result != ConnectivityResult.none;
+      final results = await Connectivity().checkConnectivity();
+      final hasConnection = results.any((result) => result != ConnectivityResult.none);
+      bool online = hasConnection;
       
       // Verification step: if connectivity_plus says offline, double check with a real host
       if (!online) {
@@ -79,15 +84,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     const FinanceScreen(),
   ];
 
-  final List<String> _screenTitles = [
-    'Dashboard',
-    'Products',
-    'Customers',
-    'Sales',
-    'Expenses',
-    'Finance',
-  ];
-
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
@@ -101,22 +97,16 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         // Initialize sync manager once authenticated
         final syncManager = ref.watch(syncManagerProvider);
         
-        return FutureBuilder<bool>(
-          future: _checkIfInitialSyncNeeded(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(body: Center(child: CircularProgressIndicator()));
-            }
-            
-            final needsSync = snapshot.data ?? false;
-            
-            if (needsSync) {
-              return _buildSyncOverlay(context, syncManager);
-            }
-            
-            return _buildMainLayout(context);
-          },
-        );
+        if (!_initialSyncChecked) {
+          _initialSyncChecked = true;
+          _decideInitialSync();
+        }
+
+        if (_needsInitialSync) {
+          return _buildSyncOverlay(context, syncManager);
+        }
+
+        return _buildMainLayout(context);
       },
       loading: () => const Scaffold(
         body: Center(
@@ -134,21 +124,39 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   Widget _buildMainLayout(BuildContext context) {
     final themeMode = ref.watch(themeProvider);
     final isDarkMode = themeMode == ThemeMode.dark;
+    final screenTitles = [
+      tr(ref, 'dashboard'),
+      tr(ref, 'catalogs'),
+      tr(ref, 'customers'),
+      tr(ref, 'sales'),
+      tr(ref, 'expenses'),
+      tr(ref, 'finance'),
+    ];
 
-    return Scaffold(
-      body: Row(
-        children: [
-          Sidebar(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (index) {
-              if (index == 6) { 
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
-                return;
-              }
-              setState(() {
-                _selectedIndex = index;
-              });
-            },
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        
+        final shouldExit = await _showExitConfirmationDialog(context);
+        if (shouldExit && context.mounted) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        body: Row(
+          children: [
+            Sidebar(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (index) {
+                if (index == 6) { 
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                  return;
+                }
+                setState(() {
+                  _selectedIndex = index;
+                });
+              },
             isDarkMode: isDarkMode,
             onThemeToggle: (value) {
               ref.read(themeProvider.notifier).setThemeMode(
@@ -180,7 +188,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                           Row(
                             children: [
                               Text(
-                                _screenTitles[_selectedIndex],
+                                screenTitles[_selectedIndex],
                                 style: TextStyle(
                                   color: Theme.of(context).colorScheme.onSurface,
                                   fontSize: 24,
@@ -208,7 +216,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      _isOnline ? 'Online' : 'Offline Mode',
+                                      _isOnline ? tr(ref, 'online') : tr(ref, 'offline_mode'),
                                       style: TextStyle(
                                         color: _isOnline ? Colors.green : Colors.amber,
                                         fontSize: 10,
@@ -222,14 +230,14 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                               IconButton(
                                 icon: const Icon(Icons.refresh_rounded, size: 16),
                                 onPressed: () => _performConnectionCheck(),
-                                tooltip: 'Ping Connection',
+                                tooltip: tr(ref, 'ping_connection'),
                                 visualDensity: VisualDensity.compact,
                                 color: AppTheme.slate400,
                               ),
                             ],
                           ),
                           Text(
-                            'Manage your business data',
+                            tr(ref, 'manage_business_data'),
                             style: TextStyle(
                               color: Theme.of(context).textTheme.bodySmall?.color,
                               fontSize: 14,
@@ -255,14 +263,14 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                           child: InkWell(
                             borderRadius: BorderRadius.circular(12),
                             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
-                            child: const Padding(
+                            child: Padding(
                               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                               child: Row(
                                 children: [
                                   Icon(Icons.settings_rounded, color: Colors.white, size: 20),
                                   SizedBox(width: 8),
                                   Text(
-                                    'Settings',
+                                    tr(ref, 'settings'),
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w600,
@@ -288,24 +296,48 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           ),
         ],
       ),
+      ),
     );
   }
 
-  Future<bool> _checkIfInitialSyncNeeded() async {
-    // We check if we have any customers or products. 
-    // If local DB is empty but we are logged in, we likely need an initial sync.
+  Future<bool> _showExitConfirmationDialog(BuildContext context) async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Exit App'),
+        content: const Text('Are you sure you want to exit Corporate Ladies?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Exit'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
+  Future<void> _decideInitialSync() async {
     try {
       final products = ref.read(productProvider);
       final customers = ref.read(customerProvider);
-      
-      // If both are empty, we might be on a new device.
-      return products.isEmpty && customers.isEmpty;
-    } catch (e) {
-      return false;
+      final needsSync = products.isEmpty && customers.isEmpty;
+      if (mounted) {
+        setState(() => _needsInitialSync = needsSync);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _needsInitialSync = false);
+      }
     }
   }
 
   Widget _buildSyncOverlay(BuildContext context, dynamic syncManager) {
+    _initialSyncFuture ??= syncManager.triggerInitialSync();
     return Scaffold(
       body: Container(
         width: double.infinity,
@@ -317,8 +349,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           children: [
             const Icon(Icons.cloud_download, size: 80, color: Colors.white),
             const SizedBox(height: 24),
-            const Text(
-              'Setting up your shop...',
+            Text(
+              tr(ref, 'setup_shop'),
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 24,
@@ -326,30 +358,37 @@ class _MainScreenState extends ConsumerState<MainScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            const Text(
-              'Fetching your data from the cloud',
+            Text(
+              tr(ref, 'fetching_cloud_data'),
               style: TextStyle(color: Colors.white70, fontSize: 16),
             ),
             const SizedBox(height: 40),
             const CircularProgressIndicator(color: Colors.white),
             const SizedBox(height: 40),
             FutureBuilder(
-              future: syncManager.triggerInitialSync(),
+              future: _initialSyncFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.done) {
                   // Use microtask to avoid build phase setState
                   Future.microtask(() {
-                    if (mounted) setState(() {});
+                    if (mounted) {
+                      _initialSyncFuture = null;
+                      _needsInitialSync = false;
+                      setState(() {});
+                    }
                   });
-                  return const Text('Complete!', style: TextStyle(color: Colors.white));
+                  return Text(tr(ref, 'complete'), style: const TextStyle(color: Colors.white));
                 }
                 if (snapshot.hasError) {
                   return Column(
                     children: [
-                      Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.redAccent)),
+                      Text('${tr(ref, 'error')}: ${snapshot.error}', style: const TextStyle(color: Colors.redAccent)),
                       TextButton(
-                        onPressed: () => setState(() {}),
-                        child: const Text('Retry', style: TextStyle(color: Colors.white)),
+                        onPressed: () {
+                          _initialSyncFuture = syncManager.triggerInitialSync();
+                          setState(() {});
+                        },
+                        child: Text(tr(ref, 'retry'), style: const TextStyle(color: Colors.white)),
                       ),
                     ],
                   );

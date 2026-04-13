@@ -21,11 +21,18 @@ class Product {
   
   @Index()
   late double price;
+
+  @Index()
+  double purchasePrice = 0;
   
   @Index()
   late int stockQuantity;
   
   String? imagePath;
+
+  String? productType;
+
+  String? quality;
   
   @Index()
   late DateTime createdAt;

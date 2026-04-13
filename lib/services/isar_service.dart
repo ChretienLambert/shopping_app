@@ -6,6 +6,7 @@ import '../models/product.dart';
 import '../models/sale.dart';
 import '../models/sale_item.dart';
 import '../models/user.dart';
+import '../models/weekly_checkup.dart';
 
 class IsarService {
   static IsarService? _instance;
@@ -34,6 +35,7 @@ class IsarService {
         SaleSchema,
         SaleItemSchema,
         UserSchema,
+        WeeklyCheckupSchema,
       ],
       directory: dir.path,
       inspector: true,

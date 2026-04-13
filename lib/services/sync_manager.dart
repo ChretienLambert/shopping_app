@@ -18,6 +18,7 @@ class SyncManager {
   final _expenseRepo = ExpenseRepository();
   
   bool _isOnline = false;
+  bool _isSyncInProgress = false;
   String? _lastError;
 
   SyncManager() {
@@ -35,7 +36,10 @@ class SyncManager {
   Future<void> _updateOnlineStatus() async {
     try {
       final results = await _connectivity.checkConnectivity();
-      bool online = results != ConnectivityResult.none;
+      final hasConnection = results.any(
+        (result) => result != ConnectivityResult.none,
+      );
+      bool online = hasConnection;
       
       // Verification step for unreliable Windows connectivity reporting
       if (!online) {
@@ -73,10 +77,18 @@ class SyncManager {
   }
 
   Future<void> syncAll() async {
+    if (_isSyncInProgress) {
+      logger.info('Sync already running. Skipping duplicate syncAll call.');
+      return;
+    }
     await _updateOnlineStatus();
-    if (!_isOnline || _supabase.auth.currentUser == null) return;
+    if (!_isOnline || _supabase.auth.currentUser == null) {
+      logger.info('Sync skipped: Offline or not logged in.');
+      return;
+    }
     
     logger.info('Starting full data sync (Pull & Push)...');
+    _isSyncInProgress = true;
     
     try {
       // 1. Pull changes from cloud
@@ -92,13 +104,26 @@ class SyncManager {
       _lastError = null;
     } catch (e) {
       _lastError = e.toString();
-      logger.error('Full sync failed', e);
+      // Check if error is network-related
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('socket') || errorStr.contains('host lookup') || errorStr.contains('network')) {
+        logger.info('Sync failed due to network issue (offline): $e');
+        _isOnline = false; // Update online status based on failure
+      } else {
+        logger.error('Full sync failed', e);
+      }
+    } finally {
+      _isSyncInProgress = false;
     }
   }
 
   /// Specialized method for first-time login on a new device.
   /// This ensures the local database is fully populated before usage.
   Future<void> triggerInitialSync() async {
+    if (_isSyncInProgress) {
+      logger.info('Sync already running. Skipping duplicate initial sync.');
+      return;
+    }
     await _updateOnlineStatus();
     if (!_isOnline || _supabase.auth.currentUser == null) {
       logger.warning('Cannot perform initial sync: Offline or not logged in.');
@@ -106,6 +131,7 @@ class SyncManager {
     }
 
     logger.info('🚀 Triggering Initial Data Pull...');
+    _isSyncInProgress = true;
     try {
       await _customerRepo.pullAll();
       await _productRepo.pullAll();
@@ -117,12 +143,17 @@ class SyncManager {
       _lastError = e.toString();
       logger.error('❌ Initial Pull Failed', e);
       rethrow;
+    } finally {
+      _isSyncInProgress = false;
     }
   }
 
   Future<void> pushAll() async {
     await _updateOnlineStatus();
-    if (!_isOnline || _supabase.auth.currentUser == null) return;
+    if (!_isOnline || _supabase.auth.currentUser == null) {
+      logger.info('Push skipped: Offline or not logged in.');
+      return;
+    }
     
     logger.info('Pushing local changes to cloud...');
     try {
@@ -134,7 +165,14 @@ class SyncManager {
       _lastError = null;
     } catch (e) {
       _lastError = e.toString();
-      logger.error('Push failed', e);
+      // Check if error is network-related
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('socket') || errorStr.contains('host lookup') || errorStr.contains('network')) {
+        logger.info('Push failed due to network issue (offline): $e');
+        _isOnline = false; // Update online status based on failure
+      } else {
+        logger.error('Push failed', e);
+      }
     }
   }
 

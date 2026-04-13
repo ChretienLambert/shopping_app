@@ -35,7 +35,7 @@ class ExpenseRepository {
         return;
       }
 
-      final data = {
+      final baseData = {
         'server_id': expense.serverId,
         'user_id': currentUser.id,
         'description': expense.description,
@@ -48,7 +48,27 @@ class ExpenseRepository {
         'updated_at': expense.updatedAt.toIso8601String(),
       };
 
-      await _supabase.from('expenses').upsert(data, onConflict: 'server_id');
+      final extendedData = {
+        ...baseData,
+        'stock_product_name': expense.stockProductName,
+        'stock_product_type': expense.stockProductType,
+        'stock_quality': expense.stockQuality,
+        'stock_quantity': expense.stockQuantity,
+        'stock_purchase_price': expense.stockPurchasePrice,
+        'stock_resale_price': expense.stockResalePrice,
+        'stock_image_path': expense.stockImagePath,
+      };
+      try {
+        await _supabase.from('expenses').upsert(extendedData, onConflict: 'server_id');
+      } catch (e) {
+        // Backward compatibility if remote schema has not been updated yet.
+        if (e.toString().contains('PGRST204')) {
+          logger.warning('Expenses table missing new stock columns, syncing legacy payload.');
+          await _supabase.from('expenses').upsert(baseData, onConflict: 'server_id');
+        } else {
+          rethrow;
+        }
+      }
 
       expense.isDirty = false;
       expense.lastSyncedAt = DateTime.now();
@@ -106,13 +126,24 @@ class ExpenseRepository {
           expense.serverId = sId;
           expense.description = data['description'];
           expense.amount = (data['amount'] as num).toDouble();
-          expense.category = ExpenseCategory.values.firstWhere(
-            (e) => e.name == data['category'],
-            orElse: () => ExpenseCategory.other,
-          );
+          final rawCategory = (data['category'] as String?) ?? '';
+          expense.category = _mapRemoteCategory(rawCategory);
           expense.expenseDate = DateTime.parse(data['expense_date']);
           expense.notes = data['notes'];
           expense.receiptImagePath = data['receipt_image_path'];
+          expense.stockProductName = data['stock_product_name'];
+          expense.stockProductType = data['stock_product_type'];
+          expense.stockQuality = data['stock_quality'];
+          expense.stockQuantity = data['stock_quantity'];
+          expense.stockPurchasePrice =
+              data['stock_purchase_price'] != null
+                  ? (data['stock_purchase_price'] as num).toDouble()
+                  : null;
+          expense.stockResalePrice =
+              data['stock_resale_price'] != null
+                  ? (data['stock_resale_price'] as num).toDouble()
+                  : null;
+          expense.stockImagePath = data['stock_image_path'];
           expense.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
           expense.createdAt = DateTime.parse(data['created_at']);
           expense.updatedAt = DateTime.parse(data['updated_at']);
@@ -125,6 +156,29 @@ class ExpenseRepository {
       logger.info('Pulled all expenses from cloud');
     } catch (e) {
       logger.error('Pull all expenses failed', e);
+    }
+  }
+
+  ExpenseCategory _mapRemoteCategory(String remoteCategory) {
+    switch (remoteCategory) {
+      case 'stock':
+        return ExpenseCategory.stock;
+      case 'business':
+        return ExpenseCategory.business;
+      case 'personalPayout':
+      case 'personal_payout':
+        return ExpenseCategory.personalPayout;
+      // Backward compatibility for existing server rows.
+      case 'socialMedia':
+      case 'stand':
+      case 'transportation':
+      case 'supplies':
+      case 'utilities':
+      case 'rent':
+      case 'marketing':
+      case 'other':
+      default:
+        return ExpenseCategory.business;
     }
   }
 }

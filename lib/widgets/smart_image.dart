@@ -26,6 +26,13 @@ class SmartImage extends StatelessWidget {
 
     Widget imageWidget;
 
+    final targetCacheWidth = width != null && width!.isFinite
+        ? (width! * 2).round()
+        : null;
+    final targetCacheHeight = height != null && height!.isFinite
+        ? (height! * 2).round()
+        : null;
+
     if (imagePath!.startsWith('http')) {
       // Remote image
       imageWidget = CachedNetworkImage(
@@ -33,6 +40,8 @@ class SmartImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
+        memCacheWidth: targetCacheWidth,
+        memCacheHeight: targetCacheHeight,
         placeholder: (context, url) => _buildPlaceholder(loading: true),
         errorWidget: (context, url, error) => _buildPlaceholder(error: true),
       );
@@ -43,22 +52,23 @@ class SmartImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
+        cacheWidth: targetCacheWidth,
+        cacheHeight: targetCacheHeight,
+        filterQuality: FilterQuality.low,
         errorBuilder: (context, error, stackTrace) => _buildPlaceholder(error: true),
       );
     } else {
       // Local file path
-      final file = File(imagePath!);
-      if (file.existsSync()) {
-        imageWidget = Image.file(
-          file,
-          width: width,
-          height: height,
-          fit: fit,
-          errorBuilder: (context, error, stackTrace) => _buildPlaceholder(error: true),
-        );
-      } else {
-        imageWidget = _buildPlaceholder(error: true);
-      }
+      imageWidget = Image.file(
+        File(imagePath!),
+        width: width,
+        height: height,
+        fit: fit,
+        cacheWidth: targetCacheWidth,
+        cacheHeight: targetCacheHeight,
+        filterQuality: FilterQuality.low,
+        errorBuilder: (context, error, stackTrace) => _buildPlaceholder(error: true),
+      );
     }
 
     return ClipRRect(

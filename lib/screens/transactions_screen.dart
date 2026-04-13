@@ -182,22 +182,12 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
 
   String _getCategoryName(ExpenseCategory category) {
     switch (category) {
-      case ExpenseCategory.socialMedia:
-        return 'Social Media';
-      case ExpenseCategory.stand:
-        return 'Stand';
-      case ExpenseCategory.transportation:
-        return 'Transportation';
-      case ExpenseCategory.supplies:
-        return 'Supplies';
-      case ExpenseCategory.utilities:
-        return 'Utilities';
-      case ExpenseCategory.rent:
-        return 'Rent';
-      case ExpenseCategory.marketing:
-        return 'Marketing';
-      case ExpenseCategory.other:
-        return 'Other';
+      case ExpenseCategory.stock:
+        return 'Stock Expense';
+      case ExpenseCategory.business:
+        return 'Business Expense';
+      case ExpenseCategory.personalPayout:
+        return 'Personal Payout';
     }
   }
 }
