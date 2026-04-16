@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_localization.dart';
+import '../finance_screen.dart';
+import '../../providers/weekly_checkup_provider.dart';
+import '../../models/weekly_checkup.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -62,7 +65,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(tr(ref, 'registration_success'))),
         );
+        // Navigate to finance screen and show weekly checkup dialog
         Navigator.pop(context);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const FinanceScreen()),
+        );
+        // Show weekly checkup dialog after a short delay
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _showWeeklyCheckupDialog();
+          }
+        });
       }
     } catch (e) {
       String message = e.toString();
@@ -83,6 +97,138 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         });
       }
     }
+  }
+
+  Future<void> _showWeeklyCheckupDialog() async {
+    final notesController = TextEditingController();
+    final payoutController = TextEditingController(text: '0');
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Weekly Checkup'),
+          content: SizedBox(
+            width: 500,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryBlue.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Welcome! Complete your first weekly checkup', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        _buildResumeRow('Stock Purchased', '0 XAF'),
+                        _buildResumeRow('Sales Revenue', '0 XAF'),
+                        _buildResumeRow('Business Expenses', '0 XAF'),
+                        _buildResumeRow('Personal Payouts', '0 XAF'),
+                        const SizedBox(height: 4),
+                        _buildResumeRow('Recovered from Sales', '0 XAF', isHighlight: true),
+                        _buildResumeRow('Remaining to Recover', '0 XAF'),
+                        _buildResumeRow('Realized Profit', '0 XAF', isHighlight: true),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Profit Distribution', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: payoutController,
+                    decoration: const InputDecoration(
+                      labelText: 'Profit Payout (take as salary)',
+                      border: OutlineInputBorder(),
+                      suffixText: 'XAF',
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: notesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes (optional)',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 2,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final payout = double.tryParse(payoutController.text) ?? 0;
+                
+                if (payout > 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('No profit available to distribute yet')),
+                  );
+                  return;
+                }
+
+                // Create weekly checkup record
+                final now = DateTime.now();
+                final weekStart = WeeklyCheckup.getWeekStartDate(now);
+                final weekEnd = WeeklyCheckup.getWeekEndDate(now);
+                
+                final checkup = WeeklyCheckup()
+                  ..weekStartDate = weekStart
+                  ..weekEndDate = weekEnd
+                  ..totalStockPurchased = 0
+                  ..totalSalesRevenue = 0
+                  ..totalBusinessExpenses = 0
+                  ..totalPersonalPayouts = 0
+                  ..capitalRecovered = 0
+                  ..capitalRemaining = 0
+                  ..realizedProfit = 0
+                  ..profitPayoutTaken = payout
+                  ..profitReinjected = 0 // No reinject option anymore
+                  ..notes = notesController.text;
+
+                await ref.read(weeklyCheckupProvider.notifier).addCheckup(checkup);
+
+                if (context.mounted) Navigator.pop(context);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
+              child: const Text('Complete Checkup'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResumeRow(String label, String value, {bool isHighlight = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: AppTheme.slate500, fontSize: 13)),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
+              fontSize: 13,
+              color: isHighlight ? (value.startsWith('-') ? Colors.red : Colors.green) : null,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

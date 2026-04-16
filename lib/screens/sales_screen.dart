@@ -13,6 +13,8 @@ import '../theme/app_theme.dart';
 import '../utils/currency_utils.dart';
 import '../utils/app_localization.dart';
 
+import 'package:uuid/uuid.dart';
+
 class SalesScreen extends ConsumerStatefulWidget {
   const SalesScreen({super.key});
 
@@ -73,7 +75,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
 
   Widget _buildSaleCard(Sale sale) {
     return FutureBuilder<Customer?>(
-      future: sale.customerId > 0 ? ref.read(customerProvider.notifier).getCustomerById(sale.customerId) : Future.value(null),
+      future: sale.customerId != '0' ? ref.read(customerProvider.notifier).getCustomerById(sale.customerId) : Future.value(null),
       builder: (context, snapshot) {
         final customer = snapshot.data;
         return Card(
@@ -97,11 +99,10 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                     fontSize: 18,
                   ),
                 ),
-                if (sale.operationId != null)
-                  Text(
-                    sale.operationId!,
-                    style: TextStyle(color: AppTheme.slate400, fontSize: 11),
-                  ),
+                Text(
+                  sale.operationId,
+                  style: TextStyle(color: AppTheme.slate400, fontSize: 11),
+                ),
               ],
             ),
             subtitle: Column(
@@ -209,7 +210,6 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     final products = ref.read(productProvider);
     final existingSales = ref.read(saleProvider);
     
-    // Step 0: Choose Sale Type
     final isDelivery = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -293,7 +293,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                           selectedCustomer!.id,
                           existingSales,
                         );
-                        if (!stats['isRegular']) {
+                        if (!(stats['isRegular'] as bool)) {
                           return const SizedBox.shrink();
                         }
                         return Container(
@@ -326,11 +326,11 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                         border: OutlineInputBorder(),
                       ),
                       items: [
-                        DropdownMenuItem(value: 0, child: Text(tr(ref, 'no_discount'))),
-                        DropdownMenuItem(value: 5, child: Text(tr(ref, 'five_percent'))),
-                        DropdownMenuItem(value: 10, child: Text(tr(ref, 'ten_percent'))),
-                        DropdownMenuItem(value: 15, child: Text(tr(ref, 'fifteen_percent'))),
-                        DropdownMenuItem(value: 20, child: Text(tr(ref, 'twenty_percent'))),
+                        DropdownMenuItem(value: 0.0, child: Text(tr(ref, 'no_discount'))),
+                        DropdownMenuItem(value: 5.0, child: Text(tr(ref, 'five_percent'))),
+                        DropdownMenuItem(value: 10.0, child: Text(tr(ref, 'ten_percent'))),
+                        DropdownMenuItem(value: 15.0, child: Text(tr(ref, 'fifteen_percent'))),
+                        DropdownMenuItem(value: 20.0, child: Text(tr(ref, 'twenty_percent'))),
                       ],
                       onChanged: (value) {
                         setState(() => discountPercent = value ?? 0);
@@ -358,7 +358,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Text(tr(ref, 'inventory_selection'), style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(tr(ref, 'inventory_selection'), style: const TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Container(
                     height: 250,
@@ -373,7 +373,8 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                       itemBuilder: (context, index) {
                         final productFiltered = products.where((p) => p.stockQuantity > 0).toList();
                         final product = productFiltered[index];
-                        final item = saleItems.firstWhere((i) => i.productId == product.id, orElse: () => SaleItem()..quantity = 0);
+                        final existingIndex = saleItems.indexWhere((i) => i.productId == product.id);
+                        final quantity = existingIndex != -1 ? saleItems[existingIndex].quantity : 0;
                         
                         return ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -384,7 +385,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                             children: [
                               IconButton(
                                 icon: const Icon(Icons.remove_circle, color: Colors.red, size: 24),
-                                onPressed: item.quantity > 0 ? () => setState(() {
+                                onPressed: quantity > 0 ? () => setState(() {
                                   final idx = saleItems.indexWhere((i) => i.productId == product.id);
                                   if (saleItems[idx].quantity > 1) {
                                     saleItems[idx].quantity--;
@@ -394,20 +395,21 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                                   }
                                 }) : null,
                               ),
-                              Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              Text('$quantity', style: const TextStyle(fontWeight: FontWeight.bold)),
                               IconButton(
                                 icon: const Icon(Icons.add_circle, color: Colors.green, size: 24),
-                                onPressed: product.stockQuantity > item.quantity ? () => setState(() {
+                                onPressed: product.stockQuantity > quantity ? () => setState(() {
                                   final idx = saleItems.indexWhere((i) => i.productId == product.id);
                                   if (idx != -1) {
                                     saleItems[idx].quantity++;
                                     saleItems[idx].totalPrice = saleItems[idx].quantity * saleItems[idx].unitPrice;
                                   } else {
-                                    saleItems.add(SaleItem()
-                                      ..productId = product.id
-                                      ..quantity = 1
-                                      ..unitPrice = product.price
-                                      ..totalPrice = product.price);
+                                    final newItem = SaleItem(id: const Uuid().v4());
+                                    newItem.productId = product.id;
+                                    newItem.quantity = 1;
+                                    newItem.unitPrice = product.price;
+                                    newItem.totalPrice = product.price;
+                                    saleItems.add(newItem);
                                   }
                                 }) : null,
                               ),
@@ -454,7 +456,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(tr(ref, 'grand_total'), style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text(tr(ref, 'grand_total'), style: const TextStyle(fontWeight: FontWeight.bold)),
                             Text(
                               CurrencyUtils.format(
                                 saleItems.fold(0.0, (sum, i) => sum + i.totalPrice) *
@@ -508,7 +510,6 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
               onPressed: saleItems.isEmpty ? null : () async {
                 setState(() => _validationError = null);
                 
-                // Validation: Must select a customer
                 if (selectedCustomer == null) {
                   setState(() => _validationError = 'Please select a customer for this sale');
                   return;
@@ -518,7 +519,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                 final discountAmount = subtotal * (discountPercent / 100);
                 final finalTotal = subtotal - discountAmount;
                 final sale = Sale()
-                  ..customerId = selectedCustomer?.id ?? 0
+                  ..customerId = selectedCustomer!.id
                   ..totalAmount = finalTotal
                   ..notes = notesController.text
                   ..isDelivery = isDelivery
@@ -535,8 +536,6 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
 
                 await ref.read(saleProvider.notifier).addSale(sale, saleItems);
                 
-                // Stock update is handled by the repository/service usually, 
-                // but let's ensure it's triggered.
                 for (var item in saleItems) {
                    final p = await ref.read(productProvider.notifier).getProductById(item.productId);
                    if (p != null) {
@@ -608,7 +607,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
 
   Future<void> _showSaleDetailsDialog(Sale sale) async {
     final saleItems = await ref.read(saleProvider.notifier).getSaleItems(sale.id);
-    final customer = sale.customerId > 0 
+    final customer = sale.customerId != '0'
         ? await ref.read(customerProvider.notifier).getCustomerById(sale.customerId) 
         : null;
 
@@ -629,8 +628,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (sale.operationId != null)
-                _buildDetailRow('Operation ID', sale.operationId!),
+              _buildDetailRow('Operation ID', sale.operationId),
               _buildDetailRow('Date', '${_formatDate(sale.saleDate)} at ${_formatTime(sale.saleDate)}'),
               _buildDetailRow('Total', CurrencyUtils.format(sale.totalAmount)),
               if (customer != null) _buildDetailRow('Customer', customer.name),
@@ -648,7 +646,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                 if (sale.deliveryAddress != null) _buildDetailRow('Address', sale.deliveryAddress!),
               ],
               const Divider(height: 32),
-              Text(tr(ref, 'items'), style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(tr(ref, 'items'), style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               ...saleItems.map((item) {
                 return FutureBuilder<Product?>(
@@ -701,7 +699,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     );
   }
 
-  Map<String, dynamic> _getCustomerLoyaltyStats(int customerId, List<Sale> sales) {
+  Map<String, dynamic> _getCustomerLoyaltyStats(String customerId, List<Sale> sales) {
     final customerSales = sales.where((sale) => sale.customerId == customerId).toList();
     final completedSales = customerSales.where((sale) => sale.isPaid).length;
     final totalSpent = customerSales.fold<double>(0, (sum, sale) => sum + sale.totalAmount);
@@ -728,4 +726,3 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     }
   }
 }
-

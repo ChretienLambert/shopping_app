@@ -29,7 +29,7 @@ class ExpenseNotifier extends StateNotifier<List<Expense>> {
     await loadExpenses();
   }
 
-  Future<Expense?> getExpenseById(int id) async {
+  Future<Expense?> getExpenseById(String id) async {
     final expenses = await _repository.getAll();
     try {
       return expenses.firstWhere((e) => e.id == id);

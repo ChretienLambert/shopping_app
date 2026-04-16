@@ -29,7 +29,7 @@ class CustomerNotifier extends StateNotifier<List<Customer>> {
     await loadCustomers();
   }
 
-  Future<Customer?> getCustomerById(int id) async {
+  Future<Customer?> getCustomerById(String id) async {
     final List<Customer> customers = await _repository.getAll();
     try {
       return customers.firstWhere((Customer c) => c.id == id);

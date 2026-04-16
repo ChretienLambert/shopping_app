@@ -1,33 +1,32 @@
-import 'package:isar/isar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/expense.dart';
-import '../services/isar_service.dart';
+import '../services/hive_service.dart';
 import '../services/logging_service.dart';
 
 class ExpenseRepository {
-  final _isar = IsarService.instance;
+  final _hive = HiveService.instance;
   final _supabase = Supabase.instance.client;
 
   Future<List<Expense>> getAll() async {
-    final db = await _isar.isar;
-    return await db.expenses.filter().deletedAtIsNull().findAll();
+    final box = _hive.expensesBox;
+    return box.values
+        .map((e) => Expense.fromJson(e))
+        .where((e) => e.deletedAt == null)
+        .toList();
   }
 
   Future<void> save(Expense expense) async {
-    final db = await _isar.isar;
+    final box = _hive.expensesBox;
     expense.isDirty = true;
     expense.updatedAt = DateTime.now();
     
-    await db.writeTxn(() async {
-      await db.expenses.put(expense);
-    });
-
+    await box.put(expense.id, expense.toJson());
     await syncOne(expense);
   }
 
   Future<void> syncOne(Expense expense) async {
     try {
-      final db = await _isar.isar;
+      final box = _hive.expensesBox;
       final currentUser = _supabase.auth.currentUser;
 
       if (currentUser == null) {
@@ -58,10 +57,10 @@ class ExpenseRepository {
         'stock_resale_price': expense.stockResalePrice,
         'stock_image_path': expense.stockImagePath,
       };
+
       try {
         await _supabase.from('expenses').upsert(extendedData, onConflict: 'server_id');
       } catch (e) {
-        // Backward compatibility if remote schema has not been updated yet.
         if (e.toString().contains('PGRST204')) {
           logger.warning('Expenses table missing new stock columns, syncing legacy payload.');
           await _supabase.from('expenses').upsert(baseData, onConflict: 'server_id');
@@ -73,13 +72,11 @@ class ExpenseRepository {
       expense.isDirty = false;
       expense.lastSyncedAt = DateTime.now();
       
-      await db.writeTxn(() async {
-        await db.expenses.put(expense);
-      });
+      await box.put(expense.id, expense.toJson());
       logger.info('Synced expense: ${expense.description}');
-    } catch (e) {
+    } catch (e, stack) {
       if (e.toString().contains('42501')) {
-         logger.error('RLS Policy Violation on Expenses', e);
+         logger.error('RLS Policy Violation on Expenses', e, stack);
       } else {
          logger.warning('Sync failed for expense ${expense.serverId}: $e');
       }
@@ -87,75 +84,76 @@ class ExpenseRepository {
   }
 
   Future<void> softDelete(Expense expense) async {
-    final db = await _isar.isar;
+    final box = _hive.expensesBox;
     expense.deletedAt = DateTime.now();
     expense.updatedAt = DateTime.now();
     expense.isDirty = true;
     
-    await db.writeTxn(() async {
-      await db.expenses.put(expense);
-    });
-    
+    await box.put(expense.id, expense.toJson());
     await syncOne(expense);
   }
 
   Future<void> syncDirty() async {
-    final db = await _isar.isar;
-    final dirtyRecords = await db.expenses.filter().isDirtyEqualTo(true).findAll();
+    final box = _hive.expensesBox;
+    final dirtyRecords = box.values
+        .map((e) => Expense.fromJson(e))
+        .where((e) => e.isDirty)
+        .toList();
+    
     if (dirtyRecords.isEmpty) return;
 
     logger.info('Found ${dirtyRecords.length} dirty expenses. Syncing...');
-    for (var record in dirtyRecords) {
-      await syncOne(record);
+    for (var expense in dirtyRecords) {
+      await syncOne(expense);
     }
   }
 
   Future<void> pullAll() async {
     try {
-      final db = await _isar.isar;
+      final box = _hive.expensesBox;
       final response = await _supabase.from('expenses').select();
       
       final List<dynamic> remoteData = response;
       
-      await db.writeTxn(() async {
-        for (var data in remoteData) {
-          final String sId = data['server_id']; // Use server_id from remote
-          final existing = await db.expenses.filter().serverIdEqualTo(sId).findFirst();
-          
-          final expense = existing ?? Expense();
-          expense.serverId = sId;
-          expense.description = data['description'];
-          expense.amount = (data['amount'] as num).toDouble();
-          final rawCategory = (data['category'] as String?) ?? '';
-          expense.category = _mapRemoteCategory(rawCategory);
-          expense.expenseDate = DateTime.parse(data['expense_date']);
-          expense.notes = data['notes'];
-          expense.receiptImagePath = data['receipt_image_path'];
-          expense.stockProductName = data['stock_product_name'];
-          expense.stockProductType = data['stock_product_type'];
-          expense.stockQuality = data['stock_quality'];
-          expense.stockQuantity = data['stock_quantity'];
-          expense.stockPurchasePrice =
-              data['stock_purchase_price'] != null
-                  ? (data['stock_purchase_price'] as num).toDouble()
-                  : null;
-          expense.stockResalePrice =
-              data['stock_resale_price'] != null
-                  ? (data['stock_resale_price'] as num).toDouble()
-                  : null;
-          expense.stockImagePath = data['stock_image_path'];
-          expense.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
-          expense.createdAt = DateTime.parse(data['created_at']);
-          expense.updatedAt = DateTime.parse(data['updated_at']);
-          expense.isDirty = false;
-          expense.lastSyncedAt = DateTime.now();
-          
-          await db.expenses.put(expense);
-        }
-      });
+      for (var data in remoteData) {
+        final String sId = data['server_id'];
+        
+        final existing = box.values
+            .map((e) => Expense.fromJson(e))
+            .firstWhere((e) => e.serverId == sId, orElse: () => Expense());
+
+        existing.serverId = sId;
+        existing.description = data['description'];
+        existing.amount = (data['amount'] as num).toDouble();
+        final rawCategory = (data['category'] as String?) ?? '';
+        existing.category = _mapRemoteCategory(rawCategory);
+        existing.expenseDate = DateTime.parse(data['expense_date']);
+        existing.notes = data['notes'];
+        existing.receiptImagePath = data['receipt_image_path'];
+        existing.stockProductName = data['stock_product_name'];
+        existing.stockProductType = data['stock_product_type'];
+        existing.stockQuality = data['stock_quality'];
+        existing.stockQuantity = data['stock_quantity'];
+        existing.stockPurchasePrice =
+            data['stock_purchase_price'] != null
+                ? (data['stock_purchase_price'] as num).toDouble()
+                : null;
+        existing.stockResalePrice =
+            data['stock_resale_price'] != null
+                ? (data['stock_resale_price'] as num).toDouble()
+                : null;
+        existing.stockImagePath = data['stock_image_path'];
+        existing.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
+        existing.createdAt = DateTime.parse(data['created_at']);
+        existing.updatedAt = DateTime.parse(data['updated_at']);
+        existing.isDirty = false;
+        existing.lastSyncedAt = DateTime.now();
+        
+        await box.put(existing.id, existing.toJson());
+      }
       logger.info('Pulled all expenses from cloud');
-    } catch (e) {
-      logger.error('Pull all expenses failed', e);
+    } catch (e, stack) {
+      logger.error('Pull all expenses failed', e, stack);
     }
   }
 
@@ -168,15 +166,6 @@ class ExpenseRepository {
       case 'personalPayout':
       case 'personal_payout':
         return ExpenseCategory.personalPayout;
-      // Backward compatibility for existing server rows.
-      case 'socialMedia':
-      case 'stand':
-      case 'transportation':
-      case 'supplies':
-      case 'utilities':
-      case 'rent':
-      case 'marketing':
-      case 'other':
       default:
         return ExpenseCategory.business;
     }

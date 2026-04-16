@@ -1,54 +1,53 @@
-import 'package:isar/isar.dart';
 import '../models/weekly_checkup.dart';
-import '../services/isar_service.dart';
+import '../services/hive_service.dart';
 
 class WeeklyCheckupRepository {
-  Future<Isar> get _isar async => await IsarService.instance.isar;
+  final _hive = HiveService.instance;
 
   Future<List<WeeklyCheckup>> getAll() async {
-    final isar = await _isar;
-    return await isar.weeklyCheckups.where().sortByCheckupDateDesc().findAll();
+    final box = _hive.getBox('weekly_checkups');
+    final checkups = box.values
+        .map((c) => WeeklyCheckup.fromJson(c))
+        .toList();
+    checkups.sort((a, b) => b.checkupDate.compareTo(a.checkupDate));
+    return checkups;
   }
 
-  Future<WeeklyCheckup?> getById(int id) async {
-    final isar = await _isar;
-    return await isar.weeklyCheckups.where().idEqualTo(id).findFirst();
+  Future<WeeklyCheckup?> getById(String id) async {
+    final box = _hive.getBox('weekly_checkups');
+    final data = box.get(id);
+    return data != null ? WeeklyCheckup.fromJson(data) : null;
   }
 
   Future<void> save(WeeklyCheckup checkup) async {
-    final isar = await _isar;
-    await isar.writeTxn(() async {
-      await isar.weeklyCheckups.put(checkup);
-    });
+    final box = _hive.getBox('weekly_checkups');
+    checkup.updatedAt = DateTime.now();
+    await box.put(checkup.id, checkup.toJson());
   }
 
   Future<void> softDelete(WeeklyCheckup checkup) async {
-    final isar = await _isar;
-    await isar.writeTxn(() async {
-      checkup.deletedAt = DateTime.now();
-      await isar.weeklyCheckups.put(checkup);
-    });
+    final box = _hive.getBox('weekly_checkups');
+    checkup.deletedAt = DateTime.now();
+    checkup.updatedAt = DateTime.now();
+    await box.put(checkup.id, checkup.toJson());
   }
 
   Future<void> delete(WeeklyCheckup checkup) async {
-    final isar = await _isar;
-    await isar.writeTxn(() async {
-      await isar.weeklyCheckups.delete(checkup.id);
-    });
+    final box = _hive.getBox('weekly_checkups');
+    await box.delete(checkup.id);
   }
 
-  // Get checkups for a specific week
   Future<List<WeeklyCheckup>> getByWeek(DateTime weekStartDate) async {
-    final isar = await _isar;
-    return await isar.weeklyCheckups
-        .where()
-        .weekStartDateEqualTo(weekStartDate)
-        .findAll();
+    final all = await getAll();
+    return all.where((c) => 
+      c.weekStartDate.year == weekStartDate.year && 
+      c.weekStartDate.month == weekStartDate.month && 
+      c.weekStartDate.day == weekStartDate.day
+    ).toList();
   }
 
-  // Get the most recent checkup
   Future<WeeklyCheckup?> getLatest() async {
-    final isar = await _isar;
-    return await isar.weeklyCheckups.where().sortByCheckupDateDesc().findFirst();
+    final all = await getAll();
+    return all.isNotEmpty ? all.first : null;
   }
 }

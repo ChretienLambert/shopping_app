@@ -1,79 +1,59 @@
-import 'package:isar/isar.dart';
 import 'package:uuid/uuid.dart';
 
-part 'weekly_checkup.g.dart';
-
-@collection
 class WeeklyCheckup {
-  Id id = Isar.autoIncrement;
-
-  @Index()
-  int? userId; // The ID of the user who created this checkup
-  
-  @Index(unique: true, replace: true)
-  String? serverId; // Supabase ID
-  
-  @Index()
-  bool isDirty = true; // Needs sync
-  
+  String id;
+  String? userId;
+  String? serverId;
+  bool isDirty;
   DateTime? lastSyncedAt;
-
-  @Index()
-  late DateTime weekStartDate; // Monday of the week being checked
-  
-  @Index()
-  late DateTime weekEndDate; // Sunday of the week being checked
-  
-  @Index()
-  late DateTime checkupDate; // When the checkup was performed
-
-  // Financial metrics for the week
-  @Index()
-  late double totalStockPurchased; // Stock expenses during the week
-  
-  @Index()
-  late double totalSalesRevenue; // Sales revenue during the week
-  
-  @Index()
-  late double totalBusinessExpenses; // Business expenses during the week
-  
-  @Index()
-  late double totalPersonalPayouts; // Personal payouts during the week
-  
-  @Index()
-  late double capitalRecovered; // Capital recovered from sales this week
-  
-  @Index()
-  late double capitalRemaining; // Capital remaining to recover
-  
-  @Index()
-  late double realizedProfit; // Profit realized this week
-  
-  @Index()
-  late double profitPayoutTaken; // Amount taken as payout
-  
-  @Index()
-  late double profitReinjected; // Amount reinjected as capital
-  
-  String? notes; // Optional notes about the week
-
-  @Index()
-  late DateTime createdAt;
-  
-  @Index()
-  late DateTime updatedAt;
-
-  @Index()
+  DateTime weekStartDate;
+  DateTime weekEndDate;
+  DateTime checkupDate;
+  double totalStockPurchased;
+  double totalSalesRevenue;
+  double totalBusinessExpenses;
+  double totalPersonalPayouts;
+  double capitalRecovered;
+  double capitalRemaining;
+  double realizedProfit;
+  double profitPayoutTaken;
+  double profitReinjected;
+  String? notes;
+  DateTime createdAt;
+  DateTime updatedAt;
   DateTime? deletedAt;
+  String? operationId;
 
-  String? operationId; // Unique operation ID (e.g., WC####)
-
-  WeeklyCheckup() {
-    serverId = const Uuid().v4();
-    checkupDate = DateTime.now();
-    createdAt = DateTime.now();
-    updatedAt = DateTime.now();
-    operationId = _generateOperationId();
+  WeeklyCheckup({
+    String? id,
+    this.userId,
+    this.serverId,
+    this.isDirty = true,
+    this.lastSyncedAt,
+    DateTime? weekStartDate,
+    DateTime? weekEndDate,
+    DateTime? checkupDate,
+    this.totalStockPurchased = 0.0,
+    this.totalSalesRevenue = 0.0,
+    this.totalBusinessExpenses = 0.0,
+    this.totalPersonalPayouts = 0.0,
+    this.capitalRecovered = 0.0,
+    this.capitalRemaining = 0.0,
+    this.realizedProfit = 0.0,
+    this.profitPayoutTaken = 0.0,
+    this.profitReinjected = 0.0,
+    this.notes,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    this.deletedAt,
+    this.operationId,
+  })  : id = id ?? const Uuid().v4(),
+        weekStartDate = weekStartDate ?? DateTime.now(),
+        weekEndDate = weekEndDate ?? DateTime.now(),
+        checkupDate = checkupDate ?? DateTime.now(),
+        createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now() {
+    operationId ??= _generateOperationId();
   }
 
   static String _generateOperationId() {
@@ -82,13 +62,61 @@ class WeeklyCheckup {
     return 'WC$random';
   }
 
-  // Get the Monday of the week for a given date
   static DateTime getWeekStartDate(DateTime date) {
     return date.subtract(Duration(days: date.weekday - 1));
   }
 
-  // Get the Sunday of the week for a given date
   static DateTime getWeekEndDate(DateTime date) {
     return date.add(Duration(days: DateTime.daysPerWeek - date.weekday));
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'userId': userId,
+        'serverId': serverId,
+        'isDirty': isDirty,
+        'lastSyncedAt': lastSyncedAt?.toIso8601String(),
+        'weekStartDate': weekStartDate.toIso8601String(),
+        'weekEndDate': weekEndDate.toIso8601String(),
+        'checkupDate': checkupDate.toIso8601String(),
+        'totalStockPurchased': totalStockPurchased,
+        'totalSalesRevenue': totalSalesRevenue,
+        'totalBusinessExpenses': totalBusinessExpenses,
+        'totalPersonalPayouts': totalPersonalPayouts,
+        'capitalRecovered': capitalRecovered,
+        'capitalRemaining': capitalRemaining,
+        'realizedProfit': realizedProfit,
+        'profitPayoutTaken': profitPayoutTaken,
+        'profitReinjected': profitReinjected,
+        'notes': notes,
+        'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+        'deletedAt': deletedAt?.toIso8601String(),
+        'operationId': operationId,
+      };
+
+  factory WeeklyCheckup.fromJson(Map<dynamic, dynamic> json) => WeeklyCheckup(
+        id: json['id'],
+        userId: json['userId'],
+        serverId: json['serverId'],
+        isDirty: json['isDirty'] ?? true,
+        lastSyncedAt: json['lastSyncedAt'] != null ? DateTime.parse(json['lastSyncedAt']) : null,
+        weekStartDate: json['weekStartDate'] != null ? DateTime.parse(json['weekStartDate']) : null,
+        weekEndDate: json['weekEndDate'] != null ? DateTime.parse(json['weekEndDate']) : null,
+        checkupDate: json['checkupDate'] != null ? DateTime.parse(json['checkupDate']) : null,
+        totalStockPurchased: (json['totalStockPurchased'] ?? 0.0).toDouble(),
+        totalSalesRevenue: (json['totalSalesRevenue'] ?? 0.0).toDouble(),
+        totalBusinessExpenses: (json['totalBusinessExpenses'] ?? 0.0).toDouble(),
+        totalPersonalPayouts: (json['totalPersonalPayouts'] ?? 0.0).toDouble(),
+        capitalRecovered: (json['capitalRecovered'] ?? 0.0).toDouble(),
+        capitalRemaining: (json['capitalRemaining'] ?? 0.0).toDouble(),
+        realizedProfit: (json['realizedProfit'] ?? 0.0).toDouble(),
+        profitPayoutTaken: (json['profitPayoutTaken'] ?? 0.0).toDouble(),
+        profitReinjected: (json['profitReinjected'] ?? 0.0).toDouble(),
+        notes: json['notes'],
+        createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
+        updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
+        deletedAt: json['deletedAt'] != null ? DateTime.parse(json['deletedAt']) : null,
+        operationId: json['operationId'],
+      );
 }

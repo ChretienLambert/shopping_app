@@ -1,33 +1,32 @@
-import 'package:isar/isar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/product.dart';
-import '../services/isar_service.dart';
+import '../services/hive_service.dart';
 import '../services/logging_service.dart';
 
 class ProductRepository {
-  final _isar = IsarService.instance;
+  final _hive = HiveService.instance;
   final _supabase = Supabase.instance.client;
 
   Future<List<Product>> getAll() async {
-    final db = await _isar.isar;
-    return await db.products.filter().deletedAtIsNull().findAll();
+    final box = _hive.productsBox;
+    return box.values
+        .map((p) => Product.fromJson(p))
+        .where((p) => p.deletedAt == null)
+        .toList();
   }
 
   Future<void> save(Product product) async {
-    final db = await _isar.isar;
+    final box = _hive.productsBox;
     product.isDirty = true;
     product.updatedAt = DateTime.now();
     
-    await db.writeTxn(() async {
-      await db.products.put(product);
-    });
-
+    await box.put(product.id, product.toJson());
     await syncOne(product);
   }
 
   Future<void> syncOne(Product product) async {
     try {
-      final db = await _isar.isar;
+      final box = _hive.productsBox;
       final currentUser = _supabase.auth.currentUser;
 
       if (currentUser == null) {
@@ -55,13 +54,11 @@ class ProductRepository {
       product.isDirty = false;
       product.lastSyncedAt = DateTime.now();
       
-      await db.writeTxn(() async {
-        await db.products.put(product);
-      });
+      await box.put(product.id, product.toJson());
       logger.info('Synced product: ${product.name}');
-    } catch (e) {
+    } catch (e, stack) {
       if (e.toString().contains('42501')) {
-         logger.error('RLS Policy Violation on Products', e);
+         logger.error('RLS Policy Violation on Products', e, stack);
       } else {
          logger.warning('Sync failed for product ${product.serverId}: $e');
       }
@@ -69,63 +66,65 @@ class ProductRepository {
   }
 
   Future<void> softDelete(Product product) async {
-    final db = await _isar.isar;
+    final box = _hive.productsBox;
     product.deletedAt = DateTime.now();
     product.updatedAt = DateTime.now();
     product.isDirty = true;
     
-    await db.writeTxn(() async {
-      await db.products.put(product);
-    });
-    
+    await box.put(product.id, product.toJson());
     await syncOne(product);
   }
 
   Future<void> syncDirty() async {
-    final db = await _isar.isar;
-    final dirtyRecords = await db.products.filter().isDirtyEqualTo(true).findAll();
+    final box = _hive.productsBox;
+    final dirtyRecords = box.values
+        .map((p) => Product.fromJson(p))
+        .where((p) => p.isDirty)
+        .toList();
+    
     if (dirtyRecords.isEmpty) return;
 
     logger.info('Found ${dirtyRecords.length} dirty products. Syncing...');
-    for (var record in dirtyRecords) {
-      await syncOne(record);
+    for (var product in dirtyRecords) {
+      await syncOne(product);
     }
   }
 
   Future<void> pullAll() async {
     try {
-      final db = await _isar.isar;
+      final box = _hive.productsBox;
       final response = await _supabase.from('products').select();
       
       final List<dynamic> remoteData = response;
       
-      await db.writeTxn(() async {
-        for (var data in remoteData) {
-          final String sId = data['server_id']; // Use server_id from remote
-          final existing = await db.products.filter().serverIdEqualTo(sId).findFirst();
-          
-          final product = existing ?? Product();
-          product.serverId = sId;
-          product.name = data['name'];
-          product.description = data['description'];
-          product.price = (data['price'] as num).toDouble();
-          product.purchasePrice = ((data['purchase_price'] ?? 0) as num).toDouble();
-          product.stockQuantity = data['stock_quantity'];
-          product.imagePath = data['image_path'];
-          product.productType = data['product_type'];
-          product.quality = data['quality'];
-          product.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
-          product.createdAt = DateTime.parse(data['created_at']);
-          product.updatedAt = DateTime.parse(data['updated_at']);
-          product.isDirty = false;
-          product.lastSyncedAt = DateTime.now();
-          
-          await db.products.put(product);
-        }
-      });
+      for (var data in remoteData) {
+        final String sId = data['server_id'];
+        
+        // Find existing local product by serverId
+        final existing = box.values
+            .map((p) => Product.fromJson(p))
+            .firstWhere((p) => p.serverId == sId, orElse: () => Product());
+
+        existing.serverId = sId;
+        existing.name = data['name'];
+        existing.description = data['description'];
+        existing.price = (data['price'] as num).toDouble();
+        existing.purchasePrice = ((data['purchase_price'] ?? 0) as num).toDouble();
+        existing.stockQuantity = data['stock_quantity'];
+        existing.imagePath = data['image_path'];
+        existing.productType = data['product_type'];
+        existing.quality = data['quality'];
+        existing.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
+        existing.createdAt = DateTime.parse(data['created_at']);
+        existing.updatedAt = DateTime.parse(data['updated_at']);
+        existing.isDirty = false;
+        existing.lastSyncedAt = DateTime.now();
+        
+        await box.put(existing.id, existing.toJson());
+      }
       logger.info('Pulled all products from cloud');
-    } catch (e) {
-      logger.error('Pull all products failed', e);
+    } catch (e, stack) {
+      logger.error('Pull all products failed', e, stack);
     }
   }
 }

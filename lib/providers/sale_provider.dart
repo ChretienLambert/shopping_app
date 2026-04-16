@@ -31,7 +31,7 @@ class SaleNotifier extends StateNotifier<List<Sale>> {
     await loadSales();
   }
 
-  Future<Sale?> getSaleById(int id) async {
+  Future<Sale?> getSaleById(String id) async {
     final sales = await _repository.getAll();
     try {
       return sales.firstWhere((s) => s.id == id);
@@ -40,7 +40,7 @@ class SaleNotifier extends StateNotifier<List<Sale>> {
     }
   }
 
-  Future<List<SaleItem>> getSaleItems(int saleId) async {
+  Future<List<SaleItem>> getSaleItems(String saleId) async {
     return await _repository.getSaleItems(saleId);
   }
 

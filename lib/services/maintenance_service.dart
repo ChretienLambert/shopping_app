@@ -1,10 +1,10 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'isar_service.dart';
+import 'hive_service.dart';
 import 'logging_service.dart';
 
 class MaintenanceService {
-  final _isar = IsarService.instance;
+  final _hive = HiveService.instance;
   final _supabase = Supabase.instance.client;
 
   /// Completely wipes local and remote data for the current user.
@@ -13,19 +13,17 @@ class MaintenanceService {
     logger.warning('SYSTEM RESET INITIATED');
     
     try {
-      // 1. Wipe Local Isar
-      await _isar.clearAllData();
-      logger.info('Local Isar database wiped.');
+      // 1. Wipe Local Hive Boxes
+      await _hive.clearAll();
+      logger.info('Local Hive database wiped.');
 
       // 2. Wipe Remote Supabase tables
-      // Note: We use the repositories or direct client to delete all records 
-      // where user_id matches or just all (if RLS restricts it to user's data anyway)
       final tables = ['sale_items', 'sales', 'products', 'customers', 'expenses'];
       
       for (final table in tables) {
         try {
-          // Delete all rows using a bigint-safe filter.
-          await _supabase.from(table).delete().gt('id', -1);
+          // Delete all rows where id is not empty (uuid string)
+          await _supabase.from(table).delete().neq('id', '');
           logger.info('Remote table $table wiped (current user data).');
         } catch (e) {
           logger.error('Failed to wipe remote table $table', e);
@@ -46,9 +44,9 @@ class MaintenanceService {
     }
   }
 
-  /// Wipe local and seed with clothing shop data
-  Future<void> resetAndSeedClothingShop() async {
-    await _isar.clearAllData();
-    await _isar.seedClothingShopData();
+  /// Wipe local database
+  Future<void> resetLocalDatabase() async {
+    await _hive.clearAll();
+    logger.info('Local Hive database wiped.');
   }
 }

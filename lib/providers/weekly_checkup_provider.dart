@@ -29,7 +29,7 @@ class WeeklyCheckupNotifier extends StateNotifier<List<WeeklyCheckup>> {
     await loadCheckups();
   }
 
-  Future<WeeklyCheckup?> getCheckupById(int id) async {
+  Future<WeeklyCheckup?> getCheckupById(String id) async {
     final checkups = await _repository.getAll();
     try {
       return checkups.firstWhere((c) => c.id == id);

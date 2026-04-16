@@ -29,7 +29,7 @@ class ProductNotifier extends StateNotifier<List<Product>> {
     await loadProducts();
   }
 
-  Future<Product?> getProductById(int id) async {
+  Future<Product?> getProductById(String id) async {
     final products = await _repository.getAll();
     try {
       return products.firstWhere((p) => p.id == id);

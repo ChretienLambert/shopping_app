@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:csv/csv.dart' as csv;
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/product_provider.dart';
@@ -343,11 +342,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
       final file = File('${directory.path}/shop_backup_${DateTime.now().millisecondsSinceEpoch}.json');
       await file.writeAsString(jsonEncode(data));
       
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(file.path)],
-          subject: 'ShopTrack Backup',
-        ),
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'ShopTrack Backup',
       );
     } catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr(ref, 'error')}: $e')));
@@ -360,16 +357,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
     for (var p in products) {
       rows.add([p.serverId, p.name, p.price, p.stockQuantity]);
     }
-    String csvData = csv.Csv().encode(rows);
+    String csvData = rows.map((row) {
+      return row.map((e) {
+        final value = e?.toString() ?? '';
+        final escaped = value.replaceAll('"', '""');
+        if (escaped.contains(',') || escaped.contains('\n') || escaped.contains('"')) {
+          return '"$escaped"';
+        }
+        return escaped;
+      }).join(',');
+    }).join('\n');
     try {
       final directory = await getTemporaryDirectory();
       final file = File('${directory.path}/inventory_${DateTime.now().millisecondsSinceEpoch}.csv');
       await file.writeAsString(csvData);
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(file.path)],
-          subject: 'Inventory CSV',
-        ),
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'Inventory CSV',
       );
     } catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr(ref, 'error')}: $e')));
@@ -428,11 +432,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
     try {
       final logFile = logger.logFile;
       if (logFile != null && await logFile.exists()) {
-        await SharePlus.instance.share(
-          ShareParams(
-            files: [XFile(logFile.path)],
-            subject: 'ShopTrack App Logs - ${DateTime.now()}',
-          ),
+        await Share.shareXFiles(
+          [XFile(logFile.path)],
+          subject: 'ShopTrack App Logs - ${DateTime.now()}',
         );
       } else {
         if (context.mounted) {
