@@ -32,9 +32,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   @override
   Widget build(BuildContext context) {
     final expenses = ref.watch(expenseProvider);
+    // Filter out personalPayout expenses from display
+    final nonPayoutExpenses = expenses.where((e) => e.category != ExpenseCategory.personalPayout).toList();
     final filteredExpenses = _selectedFilterCategory == null
-        ? expenses
-        : expenses.where((e) => e.category == _selectedFilterCategory).toList();
+        ? nonPayoutExpenses
+        : nonPayoutExpenses.where((e) => e.category == _selectedFilterCategory).toList();
 
     return Scaffold(
       backgroundColor: Colors.transparent,

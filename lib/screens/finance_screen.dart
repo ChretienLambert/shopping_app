@@ -71,7 +71,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     }
 
     final totalRevenue = sales.fold(0.0, (sum, item) => sum + item.totalAmount);
-    final stockExpenses = expenses
+    final stockDeployed = expenses
         .where((e) => e.category == ExpenseCategory.stock)
         .fold(0.0, (sum, e) => sum + e.amount);
     final businessExpenses = expenses
@@ -82,30 +82,41 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         .fold(0.0, (sum, e) => sum + e.amount);
 
     final injectedCapital = _injections.fold(0.0, (sum, i) => sum + i.amount);
-    final capitalPool = _initialCapital + injectedCapital;
+    
+    // Assets capital based on retail price (selling price)
+    final assetsCapital = products.fold<double>(
+      0,
+      (sum, p) => sum + (p.price * p.stockQuantity),
+    );
+    
+    // Cash capital = Initial capital + injections - stock spent + sales revenue - business expenses - personal payouts
+    // Cash capital is any capital not used to buy assets, with business expenses deducted
+    final cashCapital = max<double>(
+      0,
+      _initialCapital + injectedCapital - stockDeployed + totalRevenue - businessExpenses - personalPayouts,
+    );
+    
+    // Capital pool is real-time sum of assets capital (retail) + cash capital
+    final capitalPool = assetsCapital + cashCapital;
     
     // Profit is NOT automatically reinjected - only during weekly checkup
     // Capital recovery only happens when user chooses to reinject profit in checkup
-    final capitalRecovered = 0.0; // No automatic recovery from sales
-    final remainingCapital = capitalPool - stockExpenses;
-    final capitalCompletion = capitalPool <= 0 ? 0.0 : max(0.0, min(1.0, (capitalPool - remainingCapital) / capitalPool));
+    // Recovered from sales: sales revenue up to the amount of stock deployed
+    final recoveredFromSales = min<double>(totalRevenue, stockDeployed);
+    final remainingToRecover = stockDeployed - recoveredFromSales;
+    // Capital coverage: % of stock deployed recovered from sales (same as dashboard)
+    final capitalCompletion = stockDeployed <= 0 ? 0.0 : (recoveredFromSales / stockDeployed).clamp(0, 1).toDouble();
     
-    // Profit calculation: Sales - Stock - Business - Personal (no automatic capital refill)
-    final realizedProfit = max<double>(0, totalRevenue - stockExpenses) - businessExpenses - personalPayouts;
+    // Profit calculation: Sales after refilling initial cost spent on goods, minus business and personal expenses
+    // Profit only starts after stockDeployed (initial cost) is recovered from sales
+    final capitalRecoveredFromSales = min<double>(totalRevenue, stockDeployed);
+    final salesAfterCapitalRecovery = max<double>(0, totalRevenue - capitalRecoveredFromSales);
+    final realizedProfit = salesAfterCapitalRecovery - businessExpenses - personalPayouts;
     
-    final grossMargin = totalRevenue <= 0 ? 0.0 : ((totalRevenue - stockExpenses) / totalRevenue);
+    final grossMargin = totalRevenue <= 0 ? 0.0 : ((totalRevenue - stockDeployed) / totalRevenue);
     final operatingMargin = totalRevenue <= 0 ? 0.0 : (realizedProfit / totalRevenue);
     final payoutRatio = realizedProfit <= 0 ? 0.0 : (personalPayouts / (realizedProfit + personalPayouts));
     final businessCostRatio = totalRevenue <= 0 ? 0.0 : (businessExpenses / totalRevenue);
-    final assetsCapital = products.fold<double>(
-      0,
-      (sum, p) => sum + (p.purchasePrice * p.stockQuantity),
-    );
-    // Cash capital = Initial capital + injections - stock spent + sales revenue - expenses
-    final cashCapital = max<double>(
-      0,
-      capitalPool - stockExpenses + totalRevenue - businessExpenses - personalPayouts,
-    );
     final profitAvailableToSpend = max<double>(0, realizedProfit);
 
     return Scaffold(
@@ -122,7 +133,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                   child: OutlinedButton.icon(
                     onPressed: () => _showQuickResume(
                       capitalCompletion: capitalCompletion,
-                      remainingCapital: remainingCapital,
+                      remainingToRecover: remainingToRecover,
                       realizedProfit: realizedProfit,
                     ),
                     icon: const Icon(Icons.summarize_outlined),
@@ -141,12 +152,12 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () => _showWeeklyCheckupDialog(
-                      stockExpenses: stockExpenses,
+                      stockDeployed: stockDeployed,
                       totalRevenue: totalRevenue,
                       businessExpenses: businessExpenses,
                       personalPayouts: personalPayouts,
-                      capitalRecovered: capitalRecovered,
-                      remainingCapital: remainingCapital,
+                      recoveredFromSales: recoveredFromSales,
+                      remainingToRecover: remainingToRecover,
                       realizedProfit: realizedProfit,
                     ),
                     icon: const Icon(Icons.calendar_today_rounded),
@@ -188,13 +199,22 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                     Colors.orange,
                   ),
                 ),
+                SizedBox(
+                  width: 230,
+                  child: _buildStatCard(
+                    'Stock Deployed',
+                    CurrencyUtils.format(stockDeployed),
+                    Icons.inventory_rounded,
+                    Colors.red,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
             _buildCapitalProgressCard(
-              stockExpenses: stockExpenses,
-              capitalRecovered: capitalRecovered,
-              remainingCapital: remainingCapital,
+              stockDeployed: stockDeployed,
+              recoveredFromSales: recoveredFromSales,
+              remainingToRecover: remainingToRecover,
               completion: capitalCompletion,
               realizedProfit: realizedProfit,
             ),
@@ -207,7 +227,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
             const SizedBox(height: 16),
             _buildFinancialSummaryCard(
               revenue: totalRevenue,
-              stockExpenses: stockExpenses,
+              stockDeployed: stockDeployed,
               businessExpenses: businessExpenses,
               personalPayouts: personalPayouts,
               grossMargin: grossMargin,
@@ -225,9 +245,9 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
   }
 
   Widget _buildCapitalProgressCard({
-    required double stockExpenses,
-    required double capitalRecovered,
-    required double remainingCapital,
+    required double stockDeployed,
+    required double recoveredFromSales,
+    required double remainingToRecover,
     required double completion,
     required double realizedProfit,
   }) {
@@ -255,9 +275,9 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Text('${tr(ref, 'stock_deployed')} ${CurrencyUtils.format(stockExpenses)}'),
-          Text('${tr(ref, 'recovered_from_sales')} ${CurrencyUtils.format(capitalRecovered)}'),
-          Text('${tr(ref, 'remaining_to_recover')} ${CurrencyUtils.format(remainingCapital)}'),
+          Text('${tr(ref, 'stock_deployed')} ${CurrencyUtils.format(stockDeployed)}'),
+          Text('${tr(ref, 'recovered_from_sales')} ${CurrencyUtils.format(recoveredFromSales)}'),
+          Text('${tr(ref, 'remaining_to_recover')} ${CurrencyUtils.format(remainingToRecover)}'),
           const SizedBox(height: 8),
           LinearProgressIndicator(value: completion.clamp(0, 1)),
           const SizedBox(height: 8),
@@ -312,7 +332,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
 
   Widget _buildFinancialSummaryCard({
     required double revenue,
-    required double stockExpenses,
+    required double stockDeployed,
     required double businessExpenses,
     required double personalPayouts,
     required double grossMargin,
@@ -333,30 +353,38 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           Text(tr(ref, 'finance_summary'), style: const TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           _buildSummaryRow('Revenue', CurrencyUtils.format(revenue)),
-          _buildSummaryRow('Stock Cost', CurrencyUtils.format(stockExpenses)),
+          _buildSummaryRow('Stock Deployed', CurrencyUtils.format(stockDeployed)),
           _buildSummaryRow('Business Expenses', CurrencyUtils.format(businessExpenses)),
           _buildSummaryRow('Owner Salary (Payout)', CurrencyUtils.format(personalPayouts)),
           const Divider(height: 22),
-          _buildSummaryRow('Gross Margin', '${(grossMargin * 100).toStringAsFixed(1)}%'),
-          _buildSummaryRow('Operating Margin', '${(operatingMargin * 100).toStringAsFixed(1)}%'),
-          _buildSummaryRow('Salary Ratio', '${(payoutRatio * 100).toStringAsFixed(1)}%'),
+          _buildSummaryRow('Gross Margin', '${(grossMargin * 100).toStringAsFixed(1)}%', tooltip: '(Revenue - Stock Deployed) / Revenue'),
+          _buildSummaryRow('Operating Margin', '${(operatingMargin * 100).toStringAsFixed(1)}%', tooltip: 'Realized Profit / Revenue'),
+          _buildSummaryRow('Salary Ratio', '${(payoutRatio * 100).toStringAsFixed(1)}%', tooltip: 'Salary / (Profit + Salary)'),
           _buildSummaryRow(
             'Business Cost Ratio',
             '${(businessCostRatio * 100).toStringAsFixed(1)}%',
+            tooltip: 'Business Expenses / Revenue',
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryRow(String label, String value) {
+  Widget _buildSummaryRow(String label, String value, {String? tooltip}) {
+    final valueWidget = Text(value, style: const TextStyle(fontWeight: FontWeight.w600));
+    
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(color: AppTheme.slate500)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+          tooltip != null
+              ? Tooltip(
+                  message: tooltip,
+                  child: valueWidget,
+                )
+              : valueWidget,
         ],
       ),
     );
@@ -483,7 +511,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
               _CapitalInjection(
                 amount: double.tryParse(amountController.text) ?? 0,
                 description: descriptionController.text.isEmpty
-                    ? 'Capital Injection'
+                    ? 'Cash Capital Injection'
                     : descriptionController.text,
                 date: DateTime.now(),
               ),
@@ -500,13 +528,13 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
 
   void _showQuickResume({
     required double capitalCompletion,
-    required double remainingCapital,
+    required double remainingToRecover,
     required double realizedProfit,
   }) {
     final sales = ref.read(saleProvider);
     final expenses = ref.read(expenseProvider);
     final totalRevenue = sales.fold(0.0, (sum, item) => sum + item.totalAmount);
-    final stockExpenses = expenses
+    final stockDeployed = expenses
         .where((e) => e.category == ExpenseCategory.stock)
         .fold(0.0, (sum, e) => sum + e.amount);
     final businessExpenses = expenses
@@ -519,7 +547,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     final capitalPool = _initialCapital + injectedCapital;
     final cashCapital = max<double>(
       0,
-      capitalPool - stockExpenses + totalRevenue - businessExpenses - personalPayouts,
+      capitalPool - stockDeployed + totalRevenue - businessExpenses - personalPayouts,
     );
 
     showDialog(
@@ -557,8 +585,8 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                     const SizedBox(height: 8),
                     _buildResumeRow('Capital Pool', CurrencyUtils.format(capitalPool)),
                     _buildResumeRow('Cash Capital', CurrencyUtils.format(cashCapital)),
-                    _buildResumeRow('Capital Covered', '${(capitalCompletion * 100).toStringAsFixed(1)}%'),
-                    _buildResumeRow('Remaining to Cover', CurrencyUtils.format(remainingCapital)),
+                    _buildResumeRow('Capital Covered', '${(capitalCompletion * 100).toStringAsFixed(1)}%', tooltip: 'Percentage of stock deployed recovered from sales'),
+                    _buildResumeRow('Remaining to Recover', CurrencyUtils.format(remainingToRecover)),
                   ],
                 ),
               ),
@@ -589,7 +617,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                     const SizedBox(height: 8),
                     _buildResumeRow('Realized Profit', CurrencyUtils.format(realizedProfit), isHighlight: true),
                     _buildResumeRow('Total Revenue', CurrencyUtils.format(totalRevenue)),
-                    _buildResumeRow('Stock Cost', CurrencyUtils.format(stockExpenses)),
+                    _buildResumeRow('Stock Cost', CurrencyUtils.format(stockDeployed)),
                   ],
                 ),
               ),
@@ -627,38 +655,44 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     );
   }
 
-  Widget _buildResumeRow(String label, String value, {bool isHighlight = false}) {
+  Widget _buildResumeRow(String label, String value, {bool isHighlight = false, String? tooltip}) {
+    final valueWidget = Text(
+      value,
+      style: TextStyle(
+        fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
+        fontSize: 13,
+        color: isHighlight ? (value.startsWith('-') ? Colors.red : Colors.green) : null,
+      ),
+    );
+    
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(color: AppTheme.slate500, fontSize: 13)),
-          Text(
-            value,
-            style: TextStyle(
-              fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
-              fontSize: 13,
-              color: isHighlight ? (value.startsWith('-') ? Colors.red : Colors.green) : null,
-            ),
-          ),
+          tooltip != null
+              ? Tooltip(
+                  message: tooltip,
+                  child: valueWidget,
+                )
+              : valueWidget,
         ],
       ),
     );
   }
 
   Future<void> _showWeeklyCheckupDialog({
-    required double stockExpenses,
+    required double stockDeployed,
     required double totalRevenue,
     required double businessExpenses,
     required double personalPayouts,
-    required double capitalRecovered,
-    required double remainingCapital,
+    required double recoveredFromSales,
+    required double remainingToRecover,
     required double realizedProfit,
   }) async {
     final notesController = TextEditingController();
     final payoutController = TextEditingController(text: '0');
-    final reinjectController = TextEditingController(text: '0');
 
     await showDialog(
       context: context,
@@ -683,13 +717,13 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                       children: [
                         Text(tr(ref, 'this_week_summary'), style: TextStyle(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
-                        _buildResumeRow('Stock Purchased', CurrencyUtils.format(stockExpenses)),
+                        _buildResumeRow('Stock Purchased', CurrencyUtils.format(stockDeployed)),
                         _buildResumeRow('Sales Revenue', CurrencyUtils.format(totalRevenue)),
                         _buildResumeRow('Business Expenses', CurrencyUtils.format(businessExpenses)),
                         _buildResumeRow('Personal Payouts', CurrencyUtils.format(personalPayouts)),
                         const SizedBox(height: 4),
-                        _buildResumeRow('Capital Recovered', CurrencyUtils.format(capitalRecovered), isHighlight: true),
-                        _buildResumeRow('Remaining to Recover', CurrencyUtils.format(remainingCapital)),
+                        _buildResumeRow('Recovered from Sales', CurrencyUtils.format(recoveredFromSales), isHighlight: true),
+                        _buildResumeRow('Remaining to Recover', CurrencyUtils.format(remainingToRecover)),
                         _buildResumeRow('Realized Profit', CurrencyUtils.format(realizedProfit), isHighlight: true),
                       ],
                     ),
@@ -701,18 +735,6 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                     controller: payoutController,
                     decoration: const InputDecoration(
                       labelText: 'Profit Payout (take as salary)',
-                      border: OutlineInputBorder(),
-                      suffixText: 'XAF',
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
-                    onChanged: (_) => setState(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: reinjectController,
-                    decoration: const InputDecoration(
-                      labelText: 'Reinject as Capital',
                       border: OutlineInputBorder(),
                       suffixText: 'XAF',
                     ),
@@ -761,11 +783,10 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
             ElevatedButton(
               onPressed: () async {
                 final payout = double.tryParse(payoutController.text) ?? 0;
-                final reinject = double.tryParse(reinjectController.text) ?? 0;
                 
-                if (payout + reinject > realizedProfit) {
+                if (payout > realizedProfit) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(tr(ref, 'payout_reinject_exceed'))),
+                    SnackBar(content: Text(tr(ref, 'payout_exceed_profit'))),
                   );
                   return;
                 }
@@ -778,34 +799,18 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                 final checkup = WeeklyCheckup()
                   ..weekStartDate = weekStart
                   ..weekEndDate = weekEnd
-                  ..totalStockPurchased = stockExpenses
+                  ..totalStockPurchased = stockDeployed
                   ..totalSalesRevenue = totalRevenue
                   ..totalBusinessExpenses = businessExpenses
                   ..totalPersonalPayouts = personalPayouts
-                  ..capitalRecovered = capitalRecovered
-                  ..capitalRemaining = remainingCapital
+                  ..capitalRecovered = recoveredFromSales
+                  ..capitalRemaining = remainingToRecover
                   ..realizedProfit = realizedProfit
                   ..profitPayoutTaken = payout
-                  ..profitReinjected = reinject
+                  ..profitReinjected = 0 // No reinject option anymore
                   ..notes = notesController.text;
 
                 await ref.read(weeklyCheckupProvider.notifier).addCheckup(checkup);
-
-                // If reinjecting capital, add to injections
-                if (reinject > 0) {
-                  final prefs = await SharedPreferences.getInstance();
-                  final injectionsJson = prefs.getStringList(_injectionsKey) ?? [];
-                  final newInjection = _CapitalInjection(
-                    amount: reinject,
-                    description: 'Weekly checkup reinjection',
-                    date: now,
-                  );
-                  injectionsJson.add(jsonEncode(newInjection.toJson()));
-                  await prefs.setStringList(_injectionsKey, injectionsJson);
-                  setState(() {
-                    _injections.add(newInjection);
-                  });
-                }
 
                 // If taking payout, create a personalPayout expense
                 if (payout > 0) {

@@ -38,7 +38,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final products = ref.watch(productProvider);
 
     final revenue = sales.fold<double>(0, (sum, s) => sum + s.totalAmount);
-    final stockCost = expenses
+    final stockDeployed = expenses
         .where((e) => e.category == ExpenseCategory.stock)
         .fold<double>(0, (sum, e) => sum + e.amount);
     final businessCost = expenses
@@ -47,9 +47,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final payout = expenses
         .where((e) => e.category == ExpenseCategory.personalPayout)
         .fold<double>(0, (sum, e) => sum + e.amount);
-    final availableProfit =
-        (revenue - stockCost - businessCost - payout).clamp(0, double.infinity).toDouble();
-    final coverage = stockCost <= 0 ? 0.0 : (revenue / stockCost).clamp(0, 1).toDouble();
+    
+    // Recovered from sales: sales revenue up to the amount of stock deployed
+    final recoveredFromSales = revenue < stockDeployed ? revenue : stockDeployed;
+    final remainingToRecover = stockDeployed - recoveredFromSales;
+    
+    // Profit only starts after stock deployed is fully recovered
+    final salesAfterRecovery = revenue - recoveredFromSales;
+    final availableProfit = (salesAfterRecovery - businessCost - payout).clamp(0, double.infinity).toDouble();
+    
+    // Coverage: % of stock deployed recovered from sales
+    final coverage = stockDeployed <= 0 ? 0.0 : (recoveredFromSales / stockDeployed).clamp(0, 1).toDouble();
     final pendingDeliveries = sales.where((s) => s.isDelivery && !s.isPaid).length;
     final lowStock = products.where((p) => p.stockQuantity < 10).length;
 
@@ -70,7 +78,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _showQuickResume(availableProfit, coverage, revenue, stockCost),
+                    onPressed: () => _showQuickResume(availableProfit, coverage, revenue, stockDeployed, recoveredFromSales, remainingToRecover),
                     icon: const Icon(Icons.summarize_outlined),
                     label: Text(tr(ref, 'quick_resume')),
                   ),
@@ -98,7 +106,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               runSpacing: 12,
               children: [
                 _kpiCard(tr(ref, 'total_revenue'), CurrencyUtils.format(revenue), Icons.trending_up_rounded),
-                _kpiCard(tr(ref, 'stock_cost'), CurrencyUtils.format(stockCost), Icons.inventory_2_rounded),
+                _kpiCard(tr(ref, 'stock_deployed'), CurrencyUtils.format(stockDeployed), Icons.inventory_2_rounded),
                 _kpiCard(tr(ref, 'available_profit'), CurrencyUtils.format(availableProfit), Icons.savings_rounded),
               ],
             ),
@@ -114,6 +122,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(tr(ref, 'capital_coverage'), style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  Text('${tr(ref, 'stock_deployed')}: ${CurrencyUtils.format(stockDeployed)}'),
+                  Text('${tr(ref, 'recovered_from_sales')}: ${CurrencyUtils.format(recoveredFromSales)}'),
+                  Text('${tr(ref, 'remaining_to_recover')}: ${CurrencyUtils.format(remainingToRecover)}'),
                   const SizedBox(height: 8),
                   LinearProgressIndicator(value: coverage),
                   const SizedBox(height: 6),
@@ -189,7 +201,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
-  void _showQuickResume(double profit, double coverage, double revenue, double stockCost) {
+  void _showQuickResume(double profit, double coverage, double revenue, double stockDeployed, double recoveredFromSales, double remainingToRecover) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -199,9 +211,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('${tr(ref, 'available_profit')}: ${CurrencyUtils.format(profit)}'),
+            const SizedBox(height: 8),
+            Text('${tr(ref, 'stock_deployed')}: ${CurrencyUtils.format(stockDeployed)}'),
+            Text('${tr(ref, 'recovered_from_sales')}: ${CurrencyUtils.format(recoveredFromSales)}'),
+            Text('${tr(ref, 'remaining_to_recover')}: ${CurrencyUtils.format(remainingToRecover)}'),
             Text('${tr(ref, 'capital_coverage')}: ${(coverage * 100).toStringAsFixed(1)}%'),
+            const SizedBox(height: 8),
             Text('${tr(ref, 'total_revenue')}: ${CurrencyUtils.format(revenue)}'),
-            Text('${tr(ref, 'stock_cost')}: ${CurrencyUtils.format(stockCost)}'),
           ],
         ),
         actions: [
