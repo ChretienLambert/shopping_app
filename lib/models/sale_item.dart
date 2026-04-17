@@ -1,12 +1,23 @@
 import 'package:uuid/uuid.dart';
+import 'package:hive/hive.dart';
 
+part 'sale_item.g.dart';
+
+@HiveType(typeId: 7)
 class SaleItem {
+  @HiveField(0)
   String id;
+  @HiveField(1)
   String? serverId;
+  @HiveField(2)
   String saleId;
+  @HiveField(3)
   String productId;
+  @HiveField(4)
   int quantity;
+  @HiveField(5)
   double unitPrice;
+  @HiveField(6)
   double totalPrice;
 
   SaleItem({

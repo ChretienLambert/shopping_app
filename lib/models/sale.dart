@@ -1,27 +1,53 @@
 import 'package:uuid/uuid.dart';
+import 'package:hive/hive.dart';
 
-enum SaleType { store, delivery }
+part 'sale.g.dart';
 
-enum SaleLifecycleStatus { pending, completed }
+@HiveType(typeId: 4)
+enum SaleType { 
+  @HiveField(0)
+  store, 
+  @HiveField(1)
+  delivery 
+}
 
+@HiveType(typeId: 6)
 class Sale {
+  @HiveField(0)
   String id;
+  @HiveField(1)
   String customerId;
+  @HiveField(2)
   String? userId; // The ID of the user who created this sale
+  @HiveField(3)
   String? serverId; // Supabase ID
+  @HiveField(4)
   bool isDirty;
+  @HiveField(5)
   DateTime? lastSyncedAt;
+  @HiveField(6)
   double totalAmount;
+  @HiveField(7)
   DateTime saleDate;
+  @HiveField(8)
   String? notes;
+  @HiveField(9)
   String? metadataJson;
+  @HiveField(10)
   DateTime createdAt;
+  @HiveField(11)
   DateTime updatedAt;
+  @HiveField(12)
   DateTime? deletedAt;
+  @HiveField(13)
   String operationId;
+  @HiveField(14)
   bool isDelivery;
+  @HiveField(15)
   String status;
+  @HiveField(16)
   bool isPaid;
+  @HiveField(17)
   String? deliveryAddress;
 
   SaleType get saleType => isDelivery ? SaleType.delivery : SaleType.store;
@@ -111,3 +137,5 @@ class Sale {
         deliveryAddress: json['deliveryAddress'],
       );
 }
+
+enum SaleLifecycleStatus { pending, completed }

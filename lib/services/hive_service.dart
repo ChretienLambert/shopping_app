@@ -9,9 +9,10 @@ class HiveService {
   late Box<Map> customersBox;
   late Box<Map> salesBox;
   late Box<Map> expensesBox;
-  late Box<Map> weeklyCheckupsBox;
-  late Box<Map> usersBox;
-  late Box<Map> settingsBox;
+  late Box<Map> saleItemsBox;
+  late Box weeklyCheckupsBox;
+  late Box usersBox;
+  late Box settingsBox;
 
   Future<void> init() async {
     try {
@@ -21,9 +22,10 @@ class HiveService {
       customersBox = await Hive.openBox<Map>('customers');
       salesBox = await Hive.openBox<Map>('sales');
       expensesBox = await Hive.openBox<Map>('expenses');
-      weeklyCheckupsBox = await Hive.openBox<Map>('weekly_checkups');
-      usersBox = await Hive.openBox<Map>('users');
-      settingsBox = await Hive.openBox<Map>('settings');
+      saleItemsBox = await Hive.openBox<Map>('sale_items');
+      weeklyCheckupsBox = await Hive.openBox('weekly_checkups');
+      usersBox = await Hive.openBox('users');
+      settingsBox = await Hive.openBox('settings');
       
       logger.info('Hive initialized and boxes opened successfully');
     } catch (e, stack) {
@@ -33,12 +35,13 @@ class HiveService {
   }
 
   // Generic helper to get a box by name
-  Box<Map> getBox(String name) {
+  Box getBox(String name) {
     switch (name) {
       case 'products': return productsBox;
       case 'customers': return customersBox;
       case 'sales': return salesBox;
       case 'expenses': return expensesBox;
+      case 'sale_items': return saleItemsBox;
       case 'weekly_checkups': return weeklyCheckupsBox;
       case 'users': return usersBox;
       default: return settingsBox;

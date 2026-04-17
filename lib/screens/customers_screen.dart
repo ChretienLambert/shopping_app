@@ -32,14 +32,14 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'No customers yet',
+                    tr(ref, 'no_customers_yet'),
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           color: Colors.grey[600],
                         ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Tap + to add your first customer',
+                    tr(ref, 'tap_to_add_customer'),
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Colors.grey[500],
                         ),
@@ -149,7 +149,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(customer == null ? 'Add Customer' : 'Edit Customer'),
+        title: Text(customer == null ? tr(ref, 'add_customer') : tr(ref, 'edit_customer')),
         content: Form(
           key: formKey,
           child: SingleChildScrollView(
@@ -158,18 +158,18 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               children: [
                 TextFormField(
                   controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Name *',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: '${tr(ref, 'name')} *',
+                    border: const OutlineInputBorder(),
                   ),
-                  validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+                  validator: (value) => value == null || value.isEmpty ? tr(ref, 'required') : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: phoneController,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone Number',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: tr(ref, 'phone'),
+                    border: const OutlineInputBorder(),
                     prefixText: '+',
                   ),
                   keyboardType: TextInputType.phone,
@@ -181,27 +181,27 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: emailController,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: tr(ref, 'email'),
+                    border: const OutlineInputBorder(),
                   ),
                   keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: addressController,
-                  decoration: const InputDecoration(
-                    labelText: 'Address',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: tr(ref, 'address'),
+                    border: const OutlineInputBorder(),
                   ),
                   maxLines: 2,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: notesController,
-                  decoration: const InputDecoration(
-                    labelText: 'Notes',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: tr(ref, 'notes'),
+                    border: const OutlineInputBorder(),
                   ),
                   maxLines: 3,
                 ),
@@ -237,7 +237,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
-            child: Text(customer == null ? 'Add' : 'Update'),
+            child: Text(customer == null ? tr(ref, 'add') : tr(ref, 'update')),
           ),
         ],
       ),

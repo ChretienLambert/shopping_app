@@ -1,17 +1,15 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
+import 'package:bcrypt/bcrypt.dart';
 
 class AuthUtils {
-  /// Computes a SHA-256 hash of the password.
-  /// Note: In a production app, use a salt and a stronger algorithm like BCrypt/Argon2.
+  /// Computes a bcrypt hash of the password with salt.
+  /// Bcrypt is a secure password hashing algorithm with built-in salt.
   static String hashPassword(String password) {
-    final bytes = utf8.encode(password);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
+    final salt = BCrypt.gensalt();
+    return BCrypt.hashpw(password, salt);
   }
 
-  /// Verifies a password against a hash.
+  /// Verifies a password against a bcrypt hash.
   static bool verifyPassword(String password, String hash) {
-    return hashPassword(password) == hash;
+    return BCrypt.checkpw(password, hash);
   }
 }

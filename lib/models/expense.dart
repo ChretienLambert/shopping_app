@@ -1,33 +1,65 @@
 import 'package:uuid/uuid.dart';
+import 'package:hive/hive.dart';
 
+part 'expense.g.dart';
+
+@HiveType(typeId: 2)
 enum ExpenseCategory {
+  @HiveField(0)
   stock,
+  @HiveField(1)
   business,
+  @HiveField(2)
   personalPayout,
+  @HiveField(3)
+  capitalInjection,
 }
 
+@HiveType(typeId: 1)
 class Expense {
+  @HiveField(0)
   String id;
+  @HiveField(1)
   String? userId; 
+  @HiveField(2)
   String? serverId;
+  @HiveField(3)
   bool isDirty;
+  @HiveField(4)
   DateTime? lastSyncedAt;
+  @HiveField(5)
   String description;
+  @HiveField(6)
   double amount;
+  @HiveField(7)
   ExpenseCategory category;
+  @HiveField(8)
   DateTime expenseDate;
+  @HiveField(9)
   String? notes;
+  @HiveField(10)
   String? receiptImagePath;
+  @HiveField(11)
   String? stockProductName;
+  @HiveField(12)
   String? stockProductType;
+  @HiveField(13)
   String? stockQuality;
+  @HiveField(14)
   int? stockQuantity;
+  @HiveField(15)
   double? stockPurchasePrice;
+  @HiveField(16)
   double? stockResalePrice;
+  @HiveField(17)
   String? stockImagePath;
+  @HiveField(18)
   DateTime createdAt;
+  @HiveField(19)
   DateTime updatedAt;
+  @HiveField(20)
   DateTime? deletedAt;
+  @HiveField(21)
   String? operationId;
 
   Expense({
@@ -124,6 +156,8 @@ class Expense {
         return ExpenseCategory.business;
       case 'personalPayout':
         return ExpenseCategory.personalPayout;
+      case 'capitalInjection':
+        return ExpenseCategory.capitalInjection;
       default:
         return ExpenseCategory.business;
     }

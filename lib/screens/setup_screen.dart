@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/language_provider.dart';
+import '../providers/initial_capital_provider.dart';
 import '../utils/app_localization.dart';
 
 class SetupScreen extends ConsumerStatefulWidget {
@@ -15,7 +16,6 @@ class SetupScreen extends ConsumerStatefulWidget {
 
 class _SetupScreenState extends ConsumerState<SetupScreen> {
   static const _setupCompletedKey = 'app_setup_completed';
-  static const _initialCapitalKey = 'finance_initial_capital';
   static const _languageKey = 'app_language';
 
   final _capitalController = TextEditingController();
@@ -34,7 +34,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_languageKey, _selectedLanguage);
     await ref.read(languageProvider.notifier).setLanguage(_selectedLanguage);
-    await prefs.setDouble(_initialCapitalKey, initialCapital);
+    await ref.read(initialCapitalProvider.notifier).updateCapital(initialCapital);
     await prefs.setBool(_setupCompletedKey, true);
     if (mounted) {
       widget.onCompleted();
@@ -44,30 +44,78 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 460),
-            child: Card(
-              margin: const EdgeInsets.all(20),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // App Logo or Icon
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.storefront_rounded,
+                          size: 64,
+                          color: Theme.of(context).primaryColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                     Text(
-                      tr(ref, 'welcome_corporate_ladies'),
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      tr(ref, 'setup_shop'),
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      tr(ref, 'setup_business_profile'),
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey[600],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Language Selection
+                    Text(
+                      tr(ref, 'language'),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    Text(tr(ref, 'setup_business_profile')),
-                    const SizedBox(height: 20),
                     DropdownButtonFormField<String>(
                       initialValue: _selectedLanguage,
                       decoration: InputDecoration(
-                        labelText: tr(ref, 'language'),
-                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.grey[50],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
                       items: [
                         DropdownMenuItem(value: 'en', child: Text(tr(ref, 'english'))),
@@ -76,31 +124,74 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                       onChanged: (value) {
                         if (value != null) {
                           setState(() => _selectedLanguage = value);
+                          ref.read(languageProvider.notifier).setLanguage(value);
                         }
                       },
                     ),
-                    const SizedBox(height: 12),
+                    
+                    const SizedBox(height: 16),
+                    
+                    // Initial Capital
+                    Text(
+                      tr(ref, 'initial_capital'),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     TextField(
                       controller: _capitalController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       decoration: InputDecoration(
-                        labelText: tr(ref, 'initial_capital'),
-                        border: OutlineInputBorder(),
+                        hintText: '0.00',
+                        filled: true,
+                        fillColor: Colors.grey[50],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        prefixIcon: const Icon(Icons.account_balance_wallet_outlined),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _saving ? null : _completeSetup,
-                        child: _saving
-                            ? const SizedBox(
-                                height: 18,
-                                width: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : Text(tr(ref, 'start_app')),
+                    
+                    const SizedBox(height: 32),
+                    
+                    // Action Button
+                    ElevatedButton(
+                      onPressed: _saving ? null : _completeSetup,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
                       ),
+                      child: _saving
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                tr(ref, 'start_app'),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
                     ),
                   ],
                 ),

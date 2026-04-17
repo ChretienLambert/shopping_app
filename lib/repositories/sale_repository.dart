@@ -32,7 +32,10 @@ class SaleRepository {
       await itemsBox.put(item.id, item.toJson());
     }
 
-    await syncOne(sale, items);
+    // Auto-sync disabled as per request
+    // if (_supabase.auth.currentUser != null) {
+    //   await syncOne(sale, items);
+    // }
   }
 
   Future<void> syncOne(Sale sale, List<SaleItem> items) async {
@@ -56,9 +59,10 @@ class SaleRepository {
       }
 
       final data = {
-        'server_id': sale.serverId,
-        'customer_id': customerServerId,
+        'id': sale.id,
+        'server_id': sale.serverId ?? sale.id,
         'user_id': currentUser.id,
+        'customer_id': customerServerId,
         'total_amount': sale.totalAmount,
         'sale_date': sale.saleDate.toIso8601String(),
         'notes': sale.notes,
@@ -71,7 +75,12 @@ class SaleRepository {
         'updated_at': sale.updatedAt.toIso8601String(),
       };
 
-      await _supabase.from('sales').upsert(data, onConflict: 'server_id');
+      final response = await _supabase
+          .from('sales')
+          .upsert(data, onConflict: 'server_id')
+          .select()
+          .single();
+      sale.serverId = response['server_id'];
 
       // Sync items
       for (var item in items) {
@@ -79,14 +88,23 @@ class SaleRepository {
         if (productMap != null) {
           final product = Product.fromJson(productMap);
           final itemData = {
-            'server_id': item.serverId,
+            'id': item.id,
+            'server_id': item.serverId ?? item.id,
             'sale_id': sale.serverId,
             'product_id': product.serverId,
             'quantity': item.quantity,
             'unit_price': item.unitPrice,
             'total_price': item.totalPrice,
           };
-          await _supabase.from('sale_items').upsert(itemData, onConflict: 'server_id');
+          final itemResponse = await _supabase
+              .from('sale_items')
+              .upsert(itemData, onConflict: 'server_id')
+              .select()
+              .single();
+          item.serverId = itemResponse['server_id'];
+          // Update local item with its serverId
+          final itemsBox = _hive.getBox('sale_items');
+          await itemsBox.put(item.id, item.toJson());
         }
       }
 
@@ -116,15 +134,18 @@ class SaleRepository {
     
     await box.put(sale.id, sale.toJson());
     
-    final items = await getSaleItems(sale.id);
-    await syncOne(sale, items);
+    // Auto-sync disabled as per request
+    // if (_supabase.auth.currentUser != null) {
+    //   await syncOne(sale, []);
+    // }
   }
 
   Future<void> syncDirty() async {
     final box = _hive.salesBox;
     final dirtyRecords = box.values
+        .whereType<Map>()
         .map((s) => Sale.fromJson(s))
-        .where((s) => s.isDirty)
+        .where((s) => s.isDirty && s.id.isNotEmpty)
         .toList();
     
     if (dirtyRecords.isEmpty) return;
@@ -136,14 +157,19 @@ class SaleRepository {
     }
   }
 
-  Future<void> pullAll() async {
+  Future<void> pullAll({DateTime? lastSync}) async {
     try {
       final salesBox = _hive.salesBox;
       final customersBox = _hive.customersBox;
       final productsBox = _hive.productsBox;
       final itemsBox = _hive.getBox('sale_items');
 
-      final response = await _supabase.from('sales').select();
+      var query = _supabase.from('sales').select();
+      if (lastSync != null) {
+        query = query.gt('updated_at', lastSync.toIso8601String());
+      }
+
+      final response = await query;
       final List<dynamic> remoteData = response;
       
       for (var data in remoteData) {
@@ -183,35 +209,37 @@ class SaleRepository {
         await salesBox.put(existing.id, existing.toJson());
         
         // Pull and update items
-        final itemsResponse = await _supabase.from('sale_items').select().eq('sale_id', sId);
-        
-        // Clear local items for this sale first
-        final itemsToRemove = itemsBox.values
-            .map((i) => SaleItem.fromJson(i))
-            .where((i) => i.saleId == existing.id)
-            .map((i) => i.id)
-            .toList();
-        for (var id in itemsToRemove) {
-          await itemsBox.delete(id);
-        }
-        
-        for (var itemData in itemsResponse) {
-           final String pServerId = itemData['product_id'];
-           final localProduct = productsBox.values
-               .map((p) => Product.fromJson(p))
-               .firstWhere((p) => p.serverId == pServerId, orElse: () => Product(id: '0'));
-               
-           if (localProduct.id != '0') {
-             final item = SaleItem();
-             item.serverId = itemData['server_id'] ?? item.serverId;
-             item.saleId = existing.id;
-             item.productId = localProduct.id;
-             item.quantity = itemData['quantity'];
-             item.unitPrice = (itemData['unit_price'] as num).toDouble();
-             item.totalPrice = (itemData['total_price'] as num).toDouble();
-             await itemsBox.put(item.id, item.toJson());
-           }
-        }
+      final itemsResponse = await _supabase.from('sale_items').select().eq('sale_id', sId);
+      
+      // Clear local items for this sale first
+      final itemsToRemove = itemsBox.values
+          .map((i) => SaleItem.fromJson(i))
+          .where((i) => i.saleId == existing.id)
+          .map((i) => i.id)
+          .toList();
+      for (var id in itemsToRemove) {
+        await itemsBox.delete(id);
+      }
+      
+      for (var itemData in itemsResponse) {
+         final String? pServerId = itemData['product_id'];
+         if (pServerId == null) continue;
+
+         final localProduct = productsBox.values
+             .map((p) => Product.fromJson(p))
+             .firstWhere((p) => p.serverId == pServerId, orElse: () => Product(id: '0'));
+             
+         if (localProduct.id != '0') {
+           final item = SaleItem();
+           item.serverId = itemData['server_id'] ?? item.serverId;
+           item.saleId = existing.id;
+           item.productId = localProduct.id;
+           item.quantity = itemData['quantity'];
+           item.unitPrice = (itemData['unit_price'] as num).toDouble();
+           item.totalPrice = (itemData['total_price'] as num).toDouble();
+           await itemsBox.put(item.id, item.toJson());
+         }
+      }
       }
       logger.info('Pulled all sales and items from cloud');
     } catch (e, stack) {
@@ -222,7 +250,7 @@ class SaleRepository {
   Future<List<SaleItem>> getSaleItems(String saleId) async {
     final itemsBox = _hive.getBox('sale_items');
     return itemsBox.values
-        .map((i) => SaleItem.fromJson(i))
+        .map((i) => SaleItem.fromJson(i as Map))
         .where((i) => i.saleId == saleId)
         .toList();
   }

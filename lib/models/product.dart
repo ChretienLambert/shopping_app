@@ -1,20 +1,39 @@
 import 'package:uuid/uuid.dart';
+import 'package:hive/hive.dart';
 
+part 'product.g.dart';
+
+@HiveType(typeId: 3)
 class Product {
+  @HiveField(0)
   String id;
+  @HiveField(1)
   String? serverId; // Supabase ID
+  @HiveField(2)
   bool isDirty;
+  @HiveField(3)
   DateTime? lastSyncedAt;
+  @HiveField(4)
   String name;
+  @HiveField(5)
   String description;
+  @HiveField(6)
   double price;
+  @HiveField(7)
   double purchasePrice;
+  @HiveField(8)
   int stockQuantity;
+  @HiveField(9)
   String? imagePath;
+  @HiveField(10)
   String? productType;
+  @HiveField(11)
   String? quality;
+  @HiveField(12)
   DateTime createdAt;
+  @HiveField(13)
   DateTime updatedAt;
+  @HiveField(14)
   DateTime? deletedAt;
 
   Product({

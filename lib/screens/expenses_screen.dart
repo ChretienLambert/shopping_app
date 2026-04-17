@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,7 +9,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/expense.dart';
-import '../models/product.dart';
 import '../providers/expense_provider.dart';
 import '../providers/product_provider.dart';
 import '../providers/sale_provider.dart';
@@ -15,6 +16,9 @@ import '../theme/app_theme.dart';
 import '../utils/app_localization.dart';
 import '../utils/currency_utils.dart';
 import '../widgets/smart_image.dart';
+import '../services/logging_service.dart';
+import '../providers/financial_stats_provider.dart';
+import '../services/storage_service.dart';
 
 class ExpensesScreen extends ConsumerStatefulWidget {
   const ExpensesScreen({super.key});
@@ -25,9 +29,77 @@ class ExpensesScreen extends ConsumerStatefulWidget {
 
 class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   final ImagePicker _imagePicker = ImagePicker();
-  final List<String> _stockCategories = ['Dress', 'Blouse', 'Trouser', 'Set', 'Jacket', 'Skirt', 'Shirt', 'Pants', 'Other'];
+  final List<String> _stockCategories = ['dress', 'blouse', 'trouser', 'set', 'jacket', 'skirt', 'shirt', 'pants', 'other'];
   ExpenseCategory? _selectedFilterCategory;
   String? _validationError;
+
+  @override
+  void initState() {
+    super.initState();
+    _retrieveLostData();
+  }
+
+  Future<void> _retrieveLostData() async {
+    if (kIsWeb || !Platform.isAndroid) {
+      return;
+    }
+    final LostDataResponse response = await _imagePicker.retrieveLostData();
+    if (response.isEmpty) {
+      return;
+    }
+    if (response.file != null) {
+      logger.info('Recovered image: ${response.file!.path}');
+    } else {
+      logger.error('Lost data error: ${response.exception}');
+    }
+  }
+
+  Future<void> _pickImage(bool isStock, Function(String) onImagePicked) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Wrap(
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: Text(tr(ref, 'gallery')),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera),
+                title: Text(tr(ref, 'camera')),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (source != null) {
+      try {
+        final pickedFile = await _imagePicker.pickImage(
+          source: source,
+          maxWidth: 1200,
+          maxHeight: 1200,
+          imageQuality: 85,
+        );
+        if (pickedFile != null && mounted) {
+          final category = isStock ? 'products' : 'receipts';
+          final savedPath = await storageService.saveLocalImage(pickedFile.path, category);
+          onImagePicked(savedPath);
+        }
+      } catch (e) {
+        logger.error('Error picking image', e);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(tr(ref, 'error_picking_image'))),
+          );
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +128,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          _selectedFilterCategory == null ? 'No expenses yet' : 'No expenses in this category',
+                          _selectedFilterCategory == null ? tr(ref, 'no_expenses_yet') : tr(ref, 'no_expenses_category'),
                           style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                 color: Colors.grey[600],
                                 fontWeight: FontWeight.bold,
@@ -64,7 +136,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _selectedFilterCategory == null ? 'Tap + to add your first expense' : 'Select a different category',
+                          _selectedFilterCategory == null ? tr(ref, 'tap_to_add_expense') : tr(ref, 'select_different_category'),
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 color: Colors.grey[500],
                               ),
@@ -109,7 +181,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
               },
             ),
           ),
-          ...ExpenseCategory.values.map((category) {
+          ...ExpenseCategory.values.where((c) => c != ExpenseCategory.personalPayout).map((category) {
             return Padding(
               padding: const EdgeInsets.only(right: 8),
               child: ChoiceChip(
@@ -194,7 +266,63 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
             ),
           ],
         ),
-        onTap: () => _showExpenseDialog(expense: expense),
+        onTap: () => _showExpenseDetails(expense),
+      ),
+    );
+  }
+
+  void _showExpenseDetails(Expense expense) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr(ref, 'expense_details')),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _detailRow(tr(ref, 'description'), expense.description),
+              _detailRow(tr(ref, 'amount'), CurrencyUtils.format(expense.amount)),
+              _detailRow(tr(ref, 'category'), _getCategoryName(expense.category)),
+              _detailRow(tr(ref, 'date'), '${_formatDate(expense.expenseDate)} ${_formatTime(expense.expenseDate)}'),
+              if (expense.notes != null && expense.notes!.isNotEmpty)
+                _detailRow(tr(ref, 'notes'), expense.notes!),
+              if (expense.category == ExpenseCategory.stock) ...[
+                const Divider(),
+                _detailRow(tr(ref, 'product'), expense.stockProductName ?? ''),
+                _detailRow(tr(ref, 'quantity'), '${expense.stockQuantity}'),
+                _detailRow(tr(ref, 'purchase_price_unit'), CurrencyUtils.format(expense.stockPurchasePrice ?? 0)),
+              ],
+              if (expense.receiptImagePath != null || expense.stockImagePath != null) ...[
+                const SizedBox(height: 12),
+                Center(
+                  child: SmartImage(
+                    imagePath: expense.receiptImagePath ?? expense.stockImagePath,
+                    width: 200,
+                    height: 150,
+                    borderRadius: 8,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr(ref, 'close'))),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        ],
       ),
     );
   }
@@ -224,11 +352,13 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   String _getCategoryName(ExpenseCategory category) {
     switch (category) {
       case ExpenseCategory.stock:
-        return 'Stock Expense';
+        return tr(ref, 'stock_expense_title');
       case ExpenseCategory.business:
-        return 'Business Expense';
+        return tr(ref, 'business_expense_title');
       case ExpenseCategory.personalPayout:
-        return 'Personal Payout (Salary)';
+        return tr(ref, 'personal_payout_title');
+      case ExpenseCategory.capitalInjection:
+        return tr(ref, 'capital_injection_title');
     }
   }
 
@@ -240,6 +370,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
         return Icons.business_center_rounded;
       case ExpenseCategory.personalPayout:
         return Icons.payments_rounded;
+      case ExpenseCategory.capitalInjection:
+        return Icons.add_chart_rounded;
     }
   }
 
@@ -251,6 +383,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
         return AppTheme.chart5;
       case ExpenseCategory.personalPayout:
         return AppTheme.destructive;
+      case ExpenseCategory.capitalInjection:
+        return Colors.green;
     }
   }
 
@@ -272,7 +406,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           controller: newCategoryController,
           decoration: InputDecoration(
             labelText: tr(ref, 'category_name'),
-            border: OutlineInputBorder(),
+            border: const OutlineInputBorder(),
           ),
           autofocus: true,
         ),
@@ -300,19 +434,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     );
   }
 
-  Future<void> _showExpenseDialog({Expense? expense}) async {
-    final sales = ref.read(saleProvider);
-    final allExpenses = ref.read(expenseProvider);
-    final totalRevenue = sales.fold<double>(0, (sum, sale) => sum + sale.totalAmount);
-    final stockSpent = allExpenses
-        .where((e) => e.category == ExpenseCategory.stock)
-        .fold<double>(0, (sum, e) => sum + e.amount);
-    final alreadyUsedProfit = allExpenses
-        .where((e) => e.category != ExpenseCategory.stock)
-        .fold<double>(0, (sum, e) => sum + e.amount);
-    final availableProfit =
-        ((totalRevenue - stockSpent) - alreadyUsedProfit).clamp(0, double.infinity).toDouble();
-    
+  Future<void> _showExpenseDialog() async {
     // Load initial capital and injections
     final prefs = await SharedPreferences.getInstance();
     final initialCapital = prefs.getDouble('finance_initial_capital') ?? 0.0;
@@ -327,21 +449,21 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     });
 
     final formKey = GlobalKey<FormState>();
-    final descriptionController = TextEditingController(text: expense?.description ?? '');
-    final amountController = TextEditingController(text: expense?.amount.toString() ?? '');
-    final notesController = TextEditingController(text: expense?.notes ?? '');
-    final stockNameController = TextEditingController(text: expense?.stockProductName ?? '');
-    final stockTypeController = TextEditingController(text: expense?.stockProductType ?? '');
-    final stockDescriptionController = TextEditingController(
-      text: expense?.notes ?? '',
-    );
-    final stockQuantityController = TextEditingController(text: expense?.stockQuantity?.toString() ?? '');
-    final stockPurchasePriceController = TextEditingController(text: expense?.stockPurchasePrice?.toString() ?? '');
-    final stockResalePriceController = TextEditingController(text: expense?.stockResalePrice?.toString() ?? '');
-    ExpenseCategory selectedCategory = expense?.category ?? ExpenseCategory.business;
-    String? receiptImagePath = expense?.receiptImagePath;
-    String? stockImagePath = expense?.stockImagePath;
-    String selectedStockQuality = expense?.stockQuality ?? 'Second-hand';
+    final descriptionController = TextEditingController();
+    final amountController = TextEditingController();
+    final notesController = TextEditingController();
+    final stockNameController = TextEditingController();
+    final stockTypeController = TextEditingController();
+    final stockDescriptionController = TextEditingController();
+    final stockQuantityController = TextEditingController();
+    final stockPurchasePriceController = TextEditingController();
+    final stockResalePriceController = TextEditingController();
+    ExpenseCategory selectedCategory = ExpenseCategory.business;
+    DateTime selectedDate = DateTime.now();
+    String? receiptImagePath;
+    String? stockImagePath;
+    String selectedStockQuality = 'second_hand';
+    bool isSaving = false;
 
     if (!mounted) return;
 
@@ -367,36 +489,62 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           final currentCapitalPool = initialCapital + injectedCapital + currentRevenue - currentStockSpent;
           
           return AlertDialog(
-          title: Text(expense == null ? 'Add Expense' : 'Edit Expense'),
+          title: Text(tr(ref, 'add_expense')),
           content: Form(
             key: formKey,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  DropdownButtonFormField<ExpenseCategory>(
-                    initialValue: selectedCategory,
-                    decoration: const InputDecoration(
-                      labelText: 'Category',
-                      border: OutlineInputBorder(),
+                    DropdownButtonFormField<ExpenseCategory>(
+                      initialValue: selectedCategory,
+                      decoration: InputDecoration(
+                        labelText: tr(ref, 'category'),
+                        border: const OutlineInputBorder(),
+                      ),
+                      items: ExpenseCategory.values
+                          .where((c) => c != ExpenseCategory.personalPayout && c != ExpenseCategory.capitalInjection)
+                          .map((category) {
+                        return DropdownMenuItem(
+                          value: category,
+                          child: Row(
+                            children: [
+                              Icon(_getCategoryIcon(category), color: _getCategoryColor(category), size: 18),
+                              const SizedBox(width: 8),
+                              Text(_getCategoryName(category)),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => selectedCategory = value);
+                        }
+                      },
                     ),
-                    items: ExpenseCategory.values.map((category) {
-                      return DropdownMenuItem(
-                        value: category,
-                        child: Row(
-                          children: [
-                            Icon(_getCategoryIcon(category), color: _getCategoryColor(category), size: 18),
-                            const SizedBox(width: 8),
-                            Text(_getCategoryName(category)),
-                          ],
-                        ),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () async {
+                      final DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
                       );
-                    }).toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => selectedCategory = value);
+                      if (picked != null && picked != selectedDate) {
+                        setState(() => selectedDate = picked);
                       }
                     },
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: tr(ref, 'date'),
+                        border: const OutlineInputBorder(),
+                        suffixIcon: const Icon(Icons.calendar_today),
+                      ),
+                      child: Text(
+                        _formatDate(selectedDate),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   if (selectedCategory == ExpenseCategory.stock) ...[
@@ -411,14 +559,14 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                         children: [
                           const Icon(Icons.info_outline_rounded, size: 18),
                           const SizedBox(width: 6),
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'Stock refill uses capital. Profit is estimated from resale margin.',
-                              style: TextStyle(fontSize: 12),
+                              tr(ref, 'stock_refill_info'),
+                              style: const TextStyle(fontSize: 12),
                             ),
                           ),
                           Tooltip(
-                            message: 'Projected margin = (resale - cost) x quantity',
+                            message: tr(ref, 'projected_margin_help'),
                             child: Icon(Icons.help_outline_rounded, color: AppTheme.slate500, size: 18),
                           ),
                         ],
@@ -427,14 +575,16 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: stockNameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Product Name *',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: tr(ref, 'product_names'),
+                        hintText: tr(ref, 'product_names_hint'),
+                        border: const OutlineInputBorder(),
+                        helperText: tr(ref, 'product_names_helper'),
                       ),
                       validator: (value) {
                         if (selectedCategory == ExpenseCategory.stock &&
                             (value == null || value.isEmpty)) {
-                          return 'Required';
+                          return tr(ref, 'required');
                         }
                         return null;
                       },
@@ -445,14 +595,14 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                         Expanded(
                           child: DropdownButtonFormField<String>(
                             initialValue: stockTypeController.text.isNotEmpty ? stockTypeController.text : null,
-                            decoration: const InputDecoration(
-                              labelText: 'Garment Category *',
-                              border: OutlineInputBorder(),
+                            decoration: InputDecoration(
+                              labelText: tr(ref, 'garment_category'),
+                              border: const OutlineInputBorder(),
                             ),
                             items: _stockCategories.map((category) {
                               return DropdownMenuItem(
                                 value: category,
-                                child: Text(category),
+                                child: Text(tr(ref, category)),
                               );
                             }).toList(),
                             onChanged: (value) {
@@ -464,7 +614,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                             validator: (value) {
                               if (selectedCategory == ExpenseCategory.stock &&
                                   (value == null || value.isEmpty)) {
-                                return 'Required';
+                                return tr(ref, 'required');
                               }
                               return null;
                             },
@@ -481,18 +631,18 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       initialValue: selectedStockQuality,
-                      decoration: const InputDecoration(
-                        labelText: 'Condition Tier *',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: tr(ref, 'condition_tier'),
+                        border: const OutlineInputBorder(),
                       ),
-                      items: const [
+                      items: [
                         DropdownMenuItem(
-                          value: 'Second-hand',
-                          child: Text('Friperie'),
+                          value: 'second_hand',
+                          child: Text(tr(ref, 'second_hand')),
                         ),
                         DropdownMenuItem(
-                          value: 'Brand-new',
-                          child: Text('Boutique'),
+                          value: 'new_condition',
+                          child: Text(tr(ref, 'new_condition')),
                         ),
                       ],
                       onChanged: (value) {
@@ -506,9 +656,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                   if (selectedCategory == ExpenseCategory.stock) ...[
                     TextFormField(
                       controller: stockQuantityController,
-                      decoration: const InputDecoration(
-                        labelText: 'Quantity *',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: tr(ref, 'stock_quantity'),
+                        border: const OutlineInputBorder(),
                         suffixText: 'units',
                       ),
                       keyboardType: TextInputType.number,
@@ -517,7 +667,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                       validator: (value) {
                         if (selectedCategory == ExpenseCategory.stock &&
                             (value == null || value.isEmpty)) {
-                          return 'Required';
+                          return tr(ref, 'required');
                         }
                         return null;
                       },
@@ -536,12 +686,12 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              'Available capital: ${CurrencyUtils.format(currentCapitalPool)}',
+                              '${tr(ref, 'available_capital')}: ${CurrencyUtils.format(currentCapitalPool)}',
                               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                             ),
                           ),
                           Tooltip(
-                            message: 'Capital pool = Initial capital + Injections + Sales revenue - Stock expenses spent',
+                            message: tr(ref, 'capital_pool_help'),
                             child: Icon(Icons.help_outline_rounded, color: AppTheme.slate500, size: 16),
                           ),
                         ],
@@ -550,9 +700,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: stockPurchasePriceController,
-                      decoration: const InputDecoration(
-                        labelText: 'Purchase Price (per unit) *',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: tr(ref, 'purchase_price_unit'),
+                        border: const OutlineInputBorder(),
                         suffixText: 'XAF',
                       ),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -561,7 +711,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                       validator: (value) {
                         if (selectedCategory == ExpenseCategory.stock &&
                             (value == null || value.isEmpty)) {
-                          return 'Required';
+                          return tr(ref, 'required');
                         }
                         return null;
                       },
@@ -569,9 +719,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: stockResalePriceController,
-                      decoration: const InputDecoration(
-                        labelText: 'Resale Price (per unit) *',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: tr(ref, 'resale_price_unit'),
+                        border: const OutlineInputBorder(),
                         suffixText: 'XAF',
                       ),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -580,7 +730,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                       validator: (value) {
                         if (selectedCategory == ExpenseCategory.stock &&
                             (value == null || value.isEmpty)) {
-                          return 'Required';
+                          return tr(ref, 'required');
                         }
                         return null;
                       },
@@ -601,12 +751,12 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              'Projected profit: ${CurrencyUtils.format(projectedProfit)}',
+                              '${tr(ref, 'projected_profit')}: ${CurrencyUtils.format(projectedProfit)}',
                               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: projectedProfit >= 0 ? Colors.green : Colors.red),
                             ),
                           ),
                           Tooltip(
-                            message: 'Estimated profit if all units sell at resale price: (Resale - Purchase) × Quantity',
+                            message: tr(ref, 'projected_profit_help'),
                             child: Icon(Icons.help_outline_rounded, color: AppTheme.slate500, size: 16),
                           ),
                         ],
@@ -615,35 +765,22 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: stockDescriptionController,
-                      decoration: const InputDecoration(
-                        labelText: 'Product Details (fabric, size range, notes)',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: tr(ref, 'product_details_label'),
+                        border: const OutlineInputBorder(),
                       ),
                       maxLines: 2,
                     ),
                     const SizedBox(height: 16),
                     GestureDetector(
-                      onTap: () async {
-                        try {
-                          final pickedFile = await _imagePicker.pickImage(
-                            source: ImageSource.gallery,
-                          );
-                          if (pickedFile != null && mounted) {
-                            setState(() {
-                              stockImagePath = pickedFile.path;
-                            });
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            setState(() {});
-                          }
-                        }
-                      },
-                      child: SmartImage(
-                        imagePath: stockImagePath,
-                        width: 320,
-                        height: 150,
-                        borderRadius: 12,
+                      onTap: () => _pickImage(true, (path) => setState(() => stockImagePath = path)),
+                      child: Center(
+                        child: SmartImage(
+                          imagePath: stockImagePath,
+                          width: 320,
+                          height: 150,
+                          borderRadius: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -661,12 +798,12 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              'Available profit to spend/withdraw: ${CurrencyUtils.format(availableProfit)}',
+                              '${tr(ref, 'available_capital')}: ${CurrencyUtils.format(currentCapitalPool)}',
                               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                             ),
                           ),
                           Tooltip(
-                            message: 'Profit available for business expenses and personal withdrawals',
+                            message: tr(ref, 'available_capital'),
                             child: Icon(Icons.help_outline_rounded, color: AppTheme.slate500, size: 16),
                           ),
                         ],
@@ -675,56 +812,43 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: descriptionController,
-                      decoration: const InputDecoration(
-                        labelText: 'Description *',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: '${tr(ref, 'description')} *',
+                        border: const OutlineInputBorder(),
                       ),
-                      validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+                      validator: (value) => value == null || value.isEmpty ? tr(ref, 'required') : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: amountController,
-                      decoration: const InputDecoration(
-                        labelText: 'Amount *',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: '${tr(ref, 'amount')} *',
+                        border: const OutlineInputBorder(),
                         suffixText: 'XAF',
                       ),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
-                      validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+                      validator: (value) => value == null || value.isEmpty ? tr(ref, 'required') : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: notesController,
-                      decoration: const InputDecoration(
-                        labelText: 'Notes',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: tr(ref, 'notes'),
+                        border: const OutlineInputBorder(),
                       ),
                       maxLines: 2,
                     ),
                     const SizedBox(height: 16),
                     GestureDetector(
-                      onTap: () async {
-                        try {
-                          final pickedFile = await _imagePicker.pickImage(
-                            source: ImageSource.gallery,
-                          );
-                          if (pickedFile != null && mounted) {
-                            setState(() {
-                              receiptImagePath = pickedFile.path;
-                            });
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            setState(() {});
-                          }
-                        }
-                      },
-                      child: SmartImage(
-                        imagePath: receiptImagePath,
-                        width: 320,
-                        height: 150,
-                        borderRadius: 12,
+                      onTap: () => _pickImage(false, (path) => setState(() => receiptImagePath = path)),
+                      child: Center(
+                        child: SmartImage(
+                          imagePath: receiptImagePath,
+                          width: 320,
+                          height: 150,
+                          borderRadius: 12,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -763,83 +887,115 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
               child: Text(tr(ref, 'cancel')),
             ),
             ElevatedButton(
-              onPressed: () async {
+              onPressed: isSaving ? null : () async {
                 if (formKey.currentState!.validate()) {
-                  final quantity = int.tryParse(stockQuantityController.text) ?? 0;
-                  final purchasePrice = double.tryParse(stockPurchasePriceController.text) ?? 0;
-                  final resalePrice = double.tryParse(stockResalePriceController.text) ?? 0;
-                  final computedStockAmount = quantity * purchasePrice;
-                  final isStock = selectedCategory == ExpenseCategory.stock;
+                  setState(() => isSaving = true);
+                  try {
+                    final quantity = int.tryParse(stockQuantityController.text) ?? 0;
+                    final purchasePrice = double.tryParse(stockPurchasePriceController.text) ?? 0;
+                    final resalePrice = double.tryParse(stockResalePriceController.text) ?? 0;
+                    final computedStockAmount = quantity * purchasePrice;
+                    final isStock = selectedCategory == ExpenseCategory.stock;
 
-                  // Validation: Stock expense must have profit
-                  if (isStock && resalePrice <= purchasePrice) {
-                    setState(() => _validationError = 'Resale price must be greater than purchase price to make a profit');
-                    return;
-                  }
-
-                  // Validation: Expense amount must not exceed available profit (for business/personal only)
-                  if (!isStock) {
-                    final expenseAmount = double.tryParse(amountController.text) ?? 0;
-                    if (expenseAmount > availableProfit) {
-                      setState(() => _validationError = 'Insufficient profit: Available ${CurrencyUtils.format(availableProfit)}, trying to spend ${CurrencyUtils.format(expenseAmount)}');
+                    // Validation: Stock expense must have profit
+                    if (isStock && resalePrice <= purchasePrice) {
+                      setState(() {
+                        _validationError = tr(ref, 'resale_price_error');
+                        isSaving = false;
+                      });
                       return;
                     }
-                  }
 
-                  // Validation: Stock refill must have sufficient capital
-                  if (isStock) {
-                    if (computedStockAmount > currentCapitalPool) {
-                      setState(() => _validationError = 'Insufficient capital: Available ${CurrencyUtils.format(currentCapitalPool)}, trying to spend ${CurrencyUtils.format(computedStockAmount.toDouble())}');
-                      return;
+                    // Validation: Expense amount must not exceed available capital (uses capital now, not profit)
+                    if (!isStock) {
+                      final isPayout = selectedCategory == ExpenseCategory.personalPayout;
+                      final expenseAmount = double.tryParse(amountController.text) ?? 0;
+                      
+                      if (isPayout) {
+                        final availableProfit = ref.read(financialStatsProvider).availableProfit;
+                        if (expenseAmount > availableProfit) {
+                          setState(() {
+                            _validationError = '${tr(ref, 'payout_reinject_exceed')}: ${CurrencyUtils.format(availableProfit)}';
+                            isSaving = false;
+                          });
+                          return;
+                        }
+                      } else if (expenseAmount > currentCapitalPool) {
+                        setState(() {
+                          _validationError = '${tr(ref, 'insufficient_capital')}: ${CurrencyUtils.format(currentCapitalPool)}';
+                          isSaving = false;
+                        });
+                        return;
+                      }
                     }
-                  }
 
-                  final newExpense = Expense()
-                    ..description = isStock
-                        ? 'Stock purchase: ${stockNameController.text}'
-                        : descriptionController.text
-                    ..amount = isStock
-                        ? computedStockAmount.toDouble()
-                        : double.tryParse(amountController.text) ?? 0
-                    ..category = selectedCategory
-                    ..notes = isStock ? stockDescriptionController.text : notesController.text
-                    ..receiptImagePath = receiptImagePath
-                    ..stockProductName = isStock ? stockNameController.text : null
-                    ..stockProductType = isStock ? stockTypeController.text : null
-                    ..stockQuantity = isStock ? quantity : null
-                    ..stockPurchasePrice = isStock ? purchasePrice : null
-                    ..stockResalePrice = isStock ? resalePrice : null
-                    ..stockQuality = isStock ? selectedStockQuality : null
-                    ..stockImagePath = isStock ? stockImagePath : null
-                    ..operationId = expense?.operationId ?? Uuid().v4();
-
-                  if (expense != null) {
-                    newExpense.id = expense.id;
-                    newExpense.serverId = expense.serverId;
-                    newExpense.operationId = expense.operationId;
-                    await ref.read(expenseProvider.notifier).updateExpense(newExpense);
-                  } else {
-                    await ref.read(expenseProvider.notifier).addExpense(newExpense);
+                    // Validation: Stock refill must have sufficient capital
                     if (isStock) {
-                      final product = Product()
-                        ..name = stockNameController.text
-                        ..description = stockDescriptionController.text
-                        ..productType = stockTypeController.text
-                        ..quality = selectedStockQuality
-                        ..stockQuantity = quantity
-                        ..purchasePrice = purchasePrice
-                        ..price = resalePrice
-                        ..imagePath = stockImagePath;
-                      await ref.read(productProvider.notifier).addProduct(product);
+                      final names = stockNameController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+                      final totalStockAmount = computedStockAmount * names.length;
+                      if (totalStockAmount > currentCapitalPool) {
+                        setState(() {
+                          _validationError = '${tr(ref, 'insufficient_capital')}: ${tr(ref, 'all')} ${CurrencyUtils.format(currentCapitalPool)}';
+                          isSaving = false;
+                        });
+                        return;
+                      }
                     }
-                  }
 
-                  if (!context.mounted) return;
-                  Navigator.pop(context);
+                    if (isStock) {
+                      final names = stockNameController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+                      for (var name in names) {
+                        final newExpense = Expense()
+                          ..description = 'Stock purchase: $name'
+                          ..amount = computedStockAmount
+                          ..category = selectedCategory
+                          ..notes = stockDescriptionController.text
+                          ..receiptImagePath = receiptImagePath
+                          ..stockProductName = name
+                          ..stockProductType = stockTypeController.text
+                          ..stockQuantity = quantity
+                          ..stockPurchasePrice = purchasePrice
+                          ..stockResalePrice = resalePrice
+                          ..stockQuality = selectedStockQuality
+                          ..stockImagePath = stockImagePath
+                          ..expenseDate = selectedDate
+                          ..operationId = const Uuid().v4();
+
+                        await ref.read(expenseProvider.notifier).addExpense(newExpense);
+                      }
+                      // Refresh product catalog after adding stock
+                      await ref.read(productProvider.notifier).loadProducts();
+                    } else {
+                      final newExpense = Expense()
+                        ..description = descriptionController.text
+                        ..amount = double.tryParse(amountController.text) ?? 0
+                        ..category = selectedCategory
+                        ..notes = notesController.text
+                        ..receiptImagePath = receiptImagePath
+                        ..expenseDate = selectedDate
+                        ..operationId = const Uuid().v4();
+
+                      await ref.read(expenseProvider.notifier).addExpense(newExpense);
+                    }
+
+                    if (!context.mounted) return;
+                    Navigator.pop(context);
+                  } catch (e) {
+                    setState(() {
+                      _validationError = e.toString();
+                      isSaving = false;
+                    });
+                  }
                 }
               },
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
-              child: Text(expense == null ? 'Add' : 'Update'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryBlue, 
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.6),
+              ),
+              child: isSaving 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Text(tr(ref, 'add')),
             ),
           ],
         );

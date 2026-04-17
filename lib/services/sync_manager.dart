@@ -6,6 +6,8 @@ import '../repositories/customer_repository.dart';
 import '../repositories/product_repository.dart';
 import '../repositories/sale_repository.dart';
 import '../repositories/expense_repository.dart';
+import '../repositories/weekly_checkup_repository.dart';
+import '../services/hive_service.dart';
 import 'logging_service.dart';
 
 class SyncManager {
@@ -16,7 +18,7 @@ class SyncManager {
   final _productRepo = ProductRepository();
   final _saleRepo = SaleRepository();
   final _expenseRepo = ExpenseRepository();
-  
+
   bool _isOnline = false;
   bool _isSyncInProgress = false;
   String? _lastError;
@@ -26,11 +28,12 @@ class SyncManager {
   }
 
   void _init() async {
-    await _updateOnlineStatus();
-    
-    if (_isOnline && _supabase.auth.currentUser != null) {
-      syncAll();
-    }
+    // Real-time sync disabled as per request
+    // await _updateOnlineStatus();
+
+    // if (_isOnline && _supabase.auth.currentUser != null) {
+    //   syncAll();
+    // }
   }
 
   Future<void> _updateOnlineStatus() async {
@@ -87,20 +90,28 @@ class SyncManager {
       return;
     }
     
-    logger.info('Starting full data sync (Pull & Push)...');
+    logger.info('Starting incremental data sync (Pull & Push)...');
     _isSyncInProgress = true;
     
     try {
-      // 1. Pull changes from cloud
-      await _customerRepo.pullAll();
-      await _productRepo.pullAll();
-      await _saleRepo.pullAll();
-      await _expenseRepo.pullAll();
+      final settings = HiveService.instance.settingsBox;
+      final lastSyncStr = settings.get('last_synced_at') as String?;
+      final DateTime? lastSync = lastSyncStr != null ? DateTime.parse(lastSyncStr) : null;
 
-      // 2. Push local "dirty" changes
+      // Pull records updated after local latest
+      await _customerRepo.pullAll(lastSync: lastSync);
+      await _productRepo.pullAll(lastSync: lastSync);
+      await _saleRepo.pullAll(lastSync: lastSync);
+      await _expenseRepo.pullAll(lastSync: lastSync);
+      await _weeklyRepo.pullAll(lastSync: lastSync);
+      
+      // Push local "dirty" changes
       await pushAll();
       
-      logger.info('Full data sync completed.');
+      // Save sync timestamp
+      await settings.put('last_synced_at', DateTime.now().toIso8601String());
+
+      logger.info('Sync process completed.');
       _lastError = null;
     } catch (e) {
       _lastError = e.toString();
@@ -116,6 +127,10 @@ class SyncManager {
       _isSyncInProgress = false;
     }
   }
+
+  // Adding _weeklyRepo to SyncManager
+  final _weeklyRepo = WeeklyCheckupRepository();
+
 
   /// Specialized method for first-time login on a new device.
   /// This ensures the local database is fully populated before usage.
@@ -137,6 +152,7 @@ class SyncManager {
       await _productRepo.pullAll();
       await _saleRepo.pullAll();
       await _expenseRepo.pullAll();
+      await _weeklyRepo.pullAll();
       logger.info('✅ Initial Pull Completed.');
       _lastError = null;
     } catch (e) {
@@ -161,6 +177,8 @@ class SyncManager {
       await _productRepo.syncDirty();
       await _saleRepo.syncDirty();
       await _expenseRepo.syncDirty();
+      await _weeklyRepo.syncDirty();
+
       logger.info('Push completed.');
       _lastError = null;
     } catch (e) {

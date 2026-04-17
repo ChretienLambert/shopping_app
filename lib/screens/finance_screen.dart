@@ -1,123 +1,46 @@
-import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 import '../models/expense.dart';
 import '../models/weekly_checkup.dart';
 import '../providers/expense_provider.dart';
-import '../providers/product_provider.dart';
+import '../providers/financial_stats_provider.dart';
 import '../providers/sale_provider.dart';
 import '../providers/weekly_checkup_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_localization.dart';
 import '../utils/currency_utils.dart';
 
-class FinanceScreen extends ConsumerStatefulWidget {
+class FinanceScreen extends ConsumerWidget {
   const FinanceScreen({super.key});
 
   @override
-  ConsumerState<FinanceScreen> createState() => _FinanceScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stats = ref.watch(financialStatsProvider);
 
-class _FinanceScreenState extends ConsumerState<FinanceScreen> {
-  static const _initialCapitalKey = 'finance_initial_capital';
-  static const _injectionsKey = 'finance_capital_injections';
-
-  double _initialCapital = 0;
-  List<_CapitalInjection> _injections = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadFinanceSettings();
-  }
-
-  Future<void> _loadFinanceSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getStringList(_injectionsKey) ?? [];
-    setState(() {
-      _initialCapital = prefs.getDouble(_initialCapitalKey) ?? 0;
-      _injections = raw
-          .map((e) => _CapitalInjection.fromJson(jsonDecode(e) as Map<String, dynamic>))
-          .toList();
-      _loading = false;
-    });
-  }
-
-  Future<void> _saveFinanceSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_initialCapitalKey, _initialCapital);
-    await prefs.setStringList(
-      _injectionsKey,
-      _injections.map((e) => jsonEncode(e.toJson())).toList(),
+    final profitControlCards = Row(
+      children: [
+        Expanded(
+          child: _buildStatCard(
+            context,
+            tr(ref, 'available_profit'),
+            CurrencyUtils.format(stats.totalNetProfit),
+            Icons.savings_rounded,
+            Colors.green,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildStatCard(
+            context,
+            tr(ref, 'salary_from_profit'),
+            CurrencyUtils.format(stats.totalPayout),
+            Icons.payments_rounded,
+            AppTheme.primaryBlue,
+          ),
+        ),
+      ],
     );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final sales = ref.watch(saleProvider);
-    final expenses = ref.watch(expenseProvider);
-    final products = ref.watch(productProvider);
-
-    if (_loading) {
-      return const Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    final totalRevenue = sales.fold(0.0, (sum, item) => sum + item.totalAmount);
-    final stockDeployed = expenses
-        .where((e) => e.category == ExpenseCategory.stock)
-        .fold(0.0, (sum, e) => sum + e.amount);
-    final businessExpenses = expenses
-        .where((e) => e.category == ExpenseCategory.business)
-        .fold(0.0, (sum, e) => sum + e.amount);
-    final personalPayouts = expenses
-        .where((e) => e.category == ExpenseCategory.personalPayout)
-        .fold(0.0, (sum, e) => sum + e.amount);
-
-    final injectedCapital = _injections.fold(0.0, (sum, i) => sum + i.amount);
-    
-    // Assets capital based on retail price (selling price)
-    final assetsCapital = products.fold<double>(
-      0,
-      (sum, p) => sum + (p.price * p.stockQuantity),
-    );
-    
-    // Cash capital = Initial capital + injections - stock spent + sales revenue - business expenses - personal payouts
-    // Cash capital is any capital not used to buy assets, with business expenses deducted
-    final cashCapital = max<double>(
-      0,
-      _initialCapital + injectedCapital - stockDeployed + totalRevenue - businessExpenses - personalPayouts,
-    );
-    
-    // Capital pool is real-time sum of assets capital (retail) + cash capital
-    final capitalPool = assetsCapital + cashCapital;
-    
-    // Profit is NOT automatically reinjected - only during weekly checkup
-    // Capital recovery only happens when user chooses to reinject profit in checkup
-    // Recovered from sales: sales revenue up to the amount of stock deployed
-    final recoveredFromSales = min<double>(totalRevenue, stockDeployed);
-    final remainingToRecover = stockDeployed - recoveredFromSales;
-    // Capital coverage: % of stock deployed recovered from sales (same as dashboard)
-    final capitalCompletion = stockDeployed <= 0 ? 0.0 : (recoveredFromSales / stockDeployed).clamp(0, 1).toDouble();
-    
-    // Profit calculation: Sales after refilling initial cost spent on goods, minus business and personal expenses
-    // Profit only starts after stockDeployed (initial cost) is recovered from sales
-    final capitalRecoveredFromSales = min<double>(totalRevenue, stockDeployed);
-    final salesAfterCapitalRecovery = max<double>(0, totalRevenue - capitalRecoveredFromSales);
-    final realizedProfit = salesAfterCapitalRecovery - businessExpenses - personalPayouts;
-    
-    final grossMargin = totalRevenue <= 0 ? 0.0 : ((totalRevenue - stockDeployed) / totalRevenue);
-    final operatingMargin = totalRevenue <= 0 ? 0.0 : (realizedProfit / totalRevenue);
-    final payoutRatio = realizedProfit <= 0 ? 0.0 : (personalPayouts / (realizedProfit + personalPayouts));
-    final businessCostRatio = totalRevenue <= 0 ? 0.0 : (businessExpenses / totalRevenue);
-    final profitAvailableToSpend = max<double>(0, realizedProfit);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -126,131 +49,310 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Quick Actions Section (Top)
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showQuickResume(
-                      capitalCompletion: capitalCompletion,
-                      remainingToRecover: remainingToRecover,
-                      realizedProfit: realizedProfit,
+            // Top Navigation / Actions
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    SizedBox(
+                      width: constraints.maxWidth > 600 ? (constraints.maxWidth - 24) / 3 : constraints.maxWidth,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showQuickResume(
+                          context,
+                          ref,
+                          stats: stats,
+                        ),
+                        icon: const Icon(Icons.summarize_outlined),
+                        label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr(ref, 'quick_resume'))),
+                      ),
                     ),
-                    icon: const Icon(Icons.summarize_outlined),
-                    label: Text(tr(ref, 'quick_resume')),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _addInjection,
-                    icon: const Icon(Icons.add_circle_outline_rounded),
-                    label: Text(tr(ref, 'inject_capital')),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showWeeklyCheckupDialog(
-                      stockDeployed: stockDeployed,
-                      totalRevenue: totalRevenue,
-                      businessExpenses: businessExpenses,
-                      personalPayouts: personalPayouts,
-                      recoveredFromSales: recoveredFromSales,
-                      remainingToRecover: remainingToRecover,
-                      realizedProfit: realizedProfit,
+                    SizedBox(
+                      width: constraints.maxWidth > 600 ? (constraints.maxWidth - 24) / 3 : constraints.maxWidth,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _addInjection(context, ref),
+                        icon: const Icon(Icons.add_circle_outline_rounded),
+                        label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr(ref, 'inject_capital'))),
+                      ),
                     ),
-                    icon: const Icon(Icons.calendar_today_rounded),
-                    label: Text(tr(ref, 'weekly_checkup')),
-                  ),
-                ),
-              ],
+                    SizedBox(
+                      width: constraints.maxWidth > 600 ? (constraints.maxWidth - 24) / 3 : constraints.maxWidth,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showWeeklyCheckupDialog(
+                          context,
+                          ref,
+                          stats: stats,
+                        ),
+                        icon: const Icon(Icons.calendar_today_rounded),
+                        label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr(ref, 'weekly_checkup'))),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             
+            // Key Stats Wrap
             Wrap(
               spacing: 12,
               runSpacing: 12,
               children: [
                 SizedBox(
-                  width: 230,
+                  width: 220,
                   child: _buildStatCard(
-                    'Capital Pool',
-                    CurrencyUtils.format(capitalPool),
+                    context,
+                    tr(ref, 'capital_pool'),
+                    CurrencyUtils.format(stats.capitalPool),
                     Icons.account_balance_wallet_rounded,
                     AppTheme.primaryBlue,
                   ),
                 ),
                 SizedBox(
-                  width: 230,
+                  width: 220,
                   child: _buildStatCard(
-                    'Cash Capital',
-                    CurrencyUtils.format(cashCapital),
+                    context,
+                    tr(ref, 'cash_capital'),
+                    CurrencyUtils.format(stats.cashCapital),
                     Icons.payments_rounded,
                     Colors.green,
                   ),
                 ),
                 SizedBox(
-                  width: 230,
+                  width: 220,
                   child: _buildStatCard(
-                    'Assets Capital',
-                    CurrencyUtils.format(assetsCapital),
+                    context,
+                    tr(ref, 'assets_capital'),
+                    CurrencyUtils.format(stats.assetsCapital),
                     Icons.inventory_2_rounded,
                     Colors.orange,
                   ),
                 ),
                 SizedBox(
-                  width: 230,
+                  width: 220,
                   child: _buildStatCard(
-                    'Stock Deployed',
-                    CurrencyUtils.format(stockDeployed),
-                    Icons.inventory_rounded,
-                    Colors.red,
+                    context,
+                    tr(ref, 'stock_deployed'),
+                    CurrencyUtils.format(stats.totalStockDeployed),
+                    Icons.inventory_2_outlined,
+                    AppTheme.primary,
+                  ),
+                ),
+                SizedBox(
+                  width: 220,
+                  child: _buildStatCard(
+                    context,
+                    tr(ref, 'sales_count'),
+                    '${stats.totalSalesCount}',
+                    Icons.shopping_bag_rounded,
+                    Colors.purple,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
             _buildCapitalProgressCard(
-              stockDeployed: stockDeployed,
-              recoveredFromSales: recoveredFromSales,
-              remainingToRecover: remainingToRecover,
-              completion: capitalCompletion,
-              realizedProfit: realizedProfit,
+              context,
+              ref,
+              stockDeployed: stats.totalStockDeployed,
+              recoveredFromSales: stats.totalRecoveredFromSales,
+              remainingToRecover: stats.totalRemainingToRecover,
+              completion: stats.totalCoverage,
+              realizedProfit: stats.totalNetProfit,
             ),
             const SizedBox(height: 16),
-            _buildProfitControlCards(
-              profitAvailableToSpend: profitAvailableToSpend,
-              businessExpenses: businessExpenses,
-              personalPayouts: personalPayouts,
-            ),
+            profitControlCards,
             const SizedBox(height: 16),
             _buildFinancialSummaryCard(
-              revenue: totalRevenue,
-              stockDeployed: stockDeployed,
-              businessExpenses: businessExpenses,
-              personalPayouts: personalPayouts,
-              grossMargin: grossMargin,
-              operatingMargin: operatingMargin,
-              payoutRatio: payoutRatio,
-              businessCostRatio: businessCostRatio,
+              context,
+              ref,
+              revenue: stats.totalRevenue,
+              stockDeployed: stats.totalStockDeployed,
+              businessExpenses: stats.totalBusinessCost,
+              personalPayouts: stats.totalPayout,
             ),
             const SizedBox(height: 16),
-            const SizedBox(height: 12),
-            _buildInjectionsList(),
+            _buildInjectionsList(context, ref),
+            const SizedBox(height: 24),
+            _buildMonthlyWeeklyResume(context, ref),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildCapitalProgressCard({
+  Widget _buildMonthlyWeeklyResume(BuildContext context, WidgetRef ref) {
+    final rawSales = ref.watch(saleProvider);
+    final allExpenses = ref.watch(expenseProvider);
+    
+    // Get all sales and expenses
+    final sales = rawSales.where((s) => s.deletedAt == null).toList();
+    final expenses = allExpenses.where((e) => e.deletedAt == null).toList();
+    
+    // Group by month
+    final monthlyData = <String, List<Map<String, dynamic>>>{};
+    
+    for (final sale in sales) {
+      final monthKey = '${sale.saleDate.year}-${sale.saleDate.month.toString().padLeft(2, '0')}';
+      monthlyData.putIfAbsent(monthKey, () => []);
+      monthlyData[monthKey]!.add({
+        'type': 'sale',
+        'date': sale.saleDate,
+        'amount': sale.totalAmount,
+        'isPaid': sale.isPaid,
+      });
+    }
+    
+    for (final expense in expenses) {
+      final monthKey = '${expense.expenseDate.year}-${expense.expenseDate.month.toString().padLeft(2, '0')}';
+      monthlyData.putIfAbsent(monthKey, () => []);
+      monthlyData[monthKey]!.add({
+        'type': 'expense',
+        'date': expense.expenseDate,
+        'amount': expense.amount,
+        'category': expense.category,
+      });
+    }
+    
+    // Sort months in descending order
+    final sortedMonths = monthlyData.keys.toList()..sort((a, b) => b.compareTo(a));
+    
+    if (sortedMonths.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(tr(ref, 'monthly_weekly_resume'), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Theme.of(context).colorScheme.onSurface)),
+          const SizedBox(height: 16),
+          ...sortedMonths.take(6).map((monthKey) {
+            final year = int.parse(monthKey.split('-')[0]);
+            final month = int.parse(monthKey.split('-')[1]);
+            final monthName = _getMonthName(month);
+            final weekData = _calculateWeeklyStats(monthlyData[monthKey]!, year, month);
+            
+            return ExpansionTile(
+              title: Text('$monthName $year', style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
+              tilePadding: EdgeInsets.zero,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      ...weekData.entries.map((entry) {
+                        final weekNum = entry.key;
+                        final stats = entry.value;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDarkMode ? AppTheme.slate800 : AppTheme.slate50,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Week $weekNum', style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
+                              const SizedBox(height: 8),
+                              _buildResumeRow(tr(ref, 'revenue'), CurrencyUtils.format(stats['revenue'] ?? 0), isDarkMode: isDarkMode),
+                              _buildResumeRow(tr(ref, 'stock_deployed'), CurrencyUtils.format(stats['stockDeployed'] ?? 0), isDarkMode: isDarkMode),
+                              _buildResumeRow(tr(ref, 'business_expenses'), CurrencyUtils.format(stats['businessExpenses'] ?? 0), isDarkMode: isDarkMode),
+                              _buildResumeRow(tr(ref, 'personal_payout'), CurrencyUtils.format(stats['personalPayout'] ?? 0), isDarkMode: isDarkMode),
+                              _buildResumeRow(tr(ref, 'net_profit'), CurrencyUtils.format(stats['netProfit'] ?? 0), isHighlight: true, isDarkMode: isDarkMode),
+                              _buildResumeRow(tr(ref, 'sales_count'), '${stats['salesCount'] ?? 0}', isDarkMode: isDarkMode),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Map<int, Map<String, double>> _calculateWeeklyStats(List<Map<String, dynamic>> monthData, int year, int month) {
+    final weeklyStats = <int, Map<String, double>>{};
+    
+    for (int week = 1; week <= 5; week++) {
+      weeklyStats[week] = {
+        'revenue': 0,
+        'stockDeployed': 0,
+        'businessExpenses': 0,
+        'personalPayout': 0,
+        'netProfit': 0,
+        'salesCount': 0,
+      };
+    }
+    
+    for (final item in monthData) {
+      final date = item['date'] as DateTime;
+      if (date.year != year || date.month != month) continue;
+      
+      final weekNum = _getWeekOfMonth(date);
+      final stats = weeklyStats[weekNum]!;
+      
+      if (item['type'] == 'sale') {
+        if (item['isPaid'] == true) {
+          stats['revenue'] = stats['revenue']! + item['amount'] as double;
+          stats['salesCount'] = stats['salesCount']! + 1;
+        }
+      } else if (item['type'] == 'expense') {
+        final category = item['category'] as ExpenseCategory;
+        if (category == ExpenseCategory.stock) {
+          stats['stockDeployed'] = stats['stockDeployed']! + item['amount'] as double;
+        } else if (category == ExpenseCategory.business) {
+          stats['businessExpenses'] = stats['businessExpenses']! + item['amount'] as double;
+        } else if (category == ExpenseCategory.personalPayout) {
+          stats['personalPayout'] = stats['personalPayout']! + item['amount'] as double;
+        }
+      }
+      
+      stats['netProfit'] = stats['revenue']! - stats['stockDeployed']! - stats['businessExpenses']! - stats['personalPayout']!;
+    }
+    
+    return weeklyStats;
+  }
+
+  int _getWeekOfMonth(DateTime date) {
+    final firstDayOfMonth = DateTime(date.year, date.month, 1);
+    final dayOfMonth = date.day;
+    return ((dayOfMonth - 1 + firstDayOfMonth.weekday - 1) / 7).floor() + 1;
+  }
+
+  String _getMonthName(int month) {
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return months[month - 1];
+  }
+
+  Widget _buildCapitalProgressCard(
+    BuildContext context,
+    WidgetRef ref, {
     required double stockDeployed,
     required double recoveredFromSales,
     required double remainingToRecover,
     required double completion,
     required double realizedProfit,
   }) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final positiveColor = isDarkMode ? AppTheme.chart5 : Colors.green;
+    final negativeColor = isDarkMode ? AppTheme.chart3 : Colors.red;
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -263,28 +365,31 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         children: [
           Row(
             children: [
-              Text(tr(ref, 'capital_energy'), style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(tr(ref, 'capital_energy'), style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
               const SizedBox(width: 6),
               Tooltip(
-                message:
-                    'This bar shows how much of your initial capital has been recovered by sales. Profit only starts after capital is fully recovered.',
-                child: Icon(Icons.help_outline_rounded, color: AppTheme.slate500, size: 16),
+                message: tr(ref, 'capital_energy_desc'),
+                child: Icon(Icons.help_outline_rounded, color: isDarkMode ? AppTheme.slate400 : AppTheme.slate500, size: 16),
               ),
               const Spacer(),
-              Text('${(completion * 100).toStringAsFixed(1)}%'),
+              Text('${(completion * 100).toStringAsFixed(1)}%', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
             ],
           ),
           const SizedBox(height: 8),
-          Text('${tr(ref, 'stock_deployed')} ${CurrencyUtils.format(stockDeployed)}'),
-          Text('${tr(ref, 'recovered_from_sales')} ${CurrencyUtils.format(recoveredFromSales)}'),
-          Text('${tr(ref, 'remaining_to_recover')} ${CurrencyUtils.format(remainingToRecover)}'),
+          Text('${tr(ref, 'stock_deployed')} ${CurrencyUtils.format(stockDeployed)}', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+          Text('${tr(ref, 'recovered_from_sales')} ${CurrencyUtils.format(recoveredFromSales)}', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+          Text('${tr(ref, 'remaining_to_recover')} ${CurrencyUtils.format(remainingToRecover)}', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
           const SizedBox(height: 8),
-          LinearProgressIndicator(value: completion.clamp(0, 1)),
+          LinearProgressIndicator(
+            value: completion.clamp(0, 1),
+            backgroundColor: isDarkMode ? AppTheme.slate800 : AppTheme.slate200,
+            valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryBlue),
+          ),
           const SizedBox(height: 8),
           Text(
-            'Realized Profit: ${CurrencyUtils.format(realizedProfit)}',
+            '${tr(ref, 'realized_profit')}: ${CurrencyUtils.format(realizedProfit)}',
             style: TextStyle(
-              color: realizedProfit >= 0 ? Colors.green : Colors.red,
+              color: realizedProfit >= 0 ? positiveColor : negativeColor,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -293,53 +398,20 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     );
   }
 
-  Widget _buildProfitControlCards({
-    required double profitAvailableToSpend,
-    required double businessExpenses,
-    required double personalPayouts,
-  }) {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildStatCard(
-            tr(ref, 'available_profit'),
-            CurrencyUtils.format(profitAvailableToSpend),
-            Icons.savings_rounded,
-            Colors.green,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildStatCard(
-            'Business from Profit',
-            CurrencyUtils.format(businessExpenses),
-            Icons.business_center_rounded,
-            Colors.orange,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildStatCard(
-            'Salary from Profit',
-            CurrencyUtils.format(personalPayouts),
-            Icons.payments_rounded,
-            AppTheme.primaryBlue,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFinancialSummaryCard({
+  Widget _buildFinancialSummaryCard(
+    BuildContext context,
+    WidgetRef ref, {
     required double revenue,
     required double stockDeployed,
     required double businessExpenses,
     required double personalPayouts,
-    required double grossMargin,
-    required double operatingMargin,
-    required double payoutRatio,
-    required double businessCostRatio,
   }) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final grossMargin = revenue <= 0 ? 0.0 : ((revenue - stockDeployed) / revenue);
+    final operatingMargin = revenue <= 0 ? 0.0 : ((revenue - stockDeployed - businessExpenses - personalPayouts) / revenue);
+    final payoutRatio = (revenue - stockDeployed - businessExpenses) <= 0 ? 0.0 : (personalPayouts / (revenue - stockDeployed - businessExpenses));
+    final businessCostRatio = revenue <= 0 ? 0.0 : (businessExpenses / revenue);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -350,20 +422,20 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(tr(ref, 'finance_summary'), style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(tr(ref, 'finance_summary'), style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
           const SizedBox(height: 10),
-          _buildSummaryRow('Revenue', CurrencyUtils.format(revenue)),
-          _buildSummaryRow('Stock Deployed', CurrencyUtils.format(stockDeployed)),
-          _buildSummaryRow('Business Expenses', CurrencyUtils.format(businessExpenses)),
-          _buildSummaryRow('Owner Salary (Payout)', CurrencyUtils.format(personalPayouts)),
-          const Divider(height: 22),
-          _buildSummaryRow('Gross Margin', '${(grossMargin * 100).toStringAsFixed(1)}%', tooltip: '(Revenue - Stock Deployed) / Revenue'),
-          _buildSummaryRow('Operating Margin', '${(operatingMargin * 100).toStringAsFixed(1)}%', tooltip: 'Realized Profit / Revenue'),
-          _buildSummaryRow('Salary Ratio', '${(payoutRatio * 100).toStringAsFixed(1)}%', tooltip: 'Salary / (Profit + Salary)'),
+          _buildSummaryRow(tr(ref, 'revenue'), CurrencyUtils.format(revenue)),
+          _buildSummaryRow(tr(ref, 'stock_deployed'), CurrencyUtils.format(stockDeployed)),
+          _buildSummaryRow(tr(ref, 'business_expenses'), CurrencyUtils.format(businessExpenses)),
+          _buildSummaryRow(tr(ref, 'owner_salary'), CurrencyUtils.format(personalPayouts)),
+          Divider(height: 22, color: isDarkMode ? AppTheme.slate700 : AppTheme.slate200),
+          _buildSummaryRow(tr(ref, 'gross_margin'), '${(grossMargin * 100).toStringAsFixed(1)}%', tooltip: tr(ref, 'gross_margin_help')),
+          _buildSummaryRow(tr(ref, 'operating_margin'), '${(operatingMargin * 100).toStringAsFixed(1)}%', tooltip: tr(ref, 'operating_margin_help')),
+          _buildSummaryRow(tr(ref, 'salary_ratio'), '${(payoutRatio * 100).toStringAsFixed(1)}%', tooltip: tr(ref, 'salary_ratio_help')),
           _buildSummaryRow(
-            'Business Cost Ratio',
+            tr(ref, 'business_cost_ratio'),
             '${(businessCostRatio * 100).toStringAsFixed(1)}%',
-            tooltip: 'Business Expenses / Revenue',
+            tooltip: tr(ref, 'business_cost_ratio_help'),
           ),
         ],
       ),
@@ -378,7 +450,8 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: AppTheme.slate500)),
+          Expanded(child: Text(label, style: TextStyle(color: AppTheme.slate400), overflow: TextOverflow.ellipsis)),
+          const SizedBox(width: 8),
           tooltip != null
               ? Tooltip(
                   message: tooltip,
@@ -390,7 +463,8 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(BuildContext context, String title, String value, IconData icon, Color color) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -403,41 +477,56 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         children: [
           Icon(icon, color: color, size: 20),
           const SizedBox(height: 8),
-          Text(title, style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            title, 
+            style: TextStyle(color: isDarkMode ? AppTheme.slate400 : AppTheme.slate500, fontSize: 12),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildInjectionsList() {
-    if (_injections.isEmpty) {
+  Widget _buildInjectionsList(BuildContext context, WidgetRef ref) {
+    final expenses = ref.watch(expenseProvider);
+    final injections = expenses
+        .where((e) => e.category == ExpenseCategory.capitalInjection)
+        .toList();
+        
+    if (injections.isEmpty) {
       return const SizedBox.shrink();
     }
+    
+    injections.sort((a, b) => b.expenseDate.compareTo(a.expenseDate));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(tr(ref, 'capital_injections'), style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        ...List.generate(_injections.length, (index) {
-          final i = _injections[_injections.length - 1 - index];
+        ...injections.map((i) {
           return ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.add_circle_outline_rounded),
             title: Text(i.description),
-            subtitle: Text('${i.date.day}/${i.date.month}/${i.date.year}'),
+            subtitle: Text('${i.expenseDate.day}/${i.expenseDate.month}/${i.expenseDate.year}'),
             trailing: Text(
               CurrencyUtils.format(i.amount),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-            onTap: () => _showInjectionDetail(i, _injections.length - 1 - index),
+            onTap: () => _showInjectionDetail(context, ref, i),
           );
         }),
       ],
     );
   }
 
-  void _showInjectionDetail(_CapitalInjection injection, int index) {
+  void _showInjectionDetail(BuildContext context, WidgetRef ref, Expense injection) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -446,17 +535,16 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildDetailRow('Description', injection.description),
-            _buildDetailRow('Amount', CurrencyUtils.format(injection.amount)),
-            _buildDetailRow('Date', '${injection.date.day}/${injection.date.month}/${injection.date.year}'),
-            _buildDetailRow('Time', '${injection.date.hour.toString().padLeft(2, '0')}:${injection.date.minute.toString().padLeft(2, '0')}'),
+            _buildDetailRow(tr(ref, 'description'), injection.description),
+            _buildDetailRow(tr(ref, 'amount'), CurrencyUtils.format(injection.amount)),
+            _buildDetailRow(tr(ref, 'date'), '${injection.expenseDate.day}/${injection.expenseDate.month}/${injection.expenseDate.year}'),
+            _buildDetailRow(tr(ref, 'time'), '${injection.expenseDate.hour.toString().padLeft(2, '0')}:${injection.expenseDate.minute.toString().padLeft(2, '0')}'),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () {
-              setState(() => _injections.removeAt(_injections.length - 1 - index));
-              _saveFinanceSettings();
+              ref.read(expenseProvider.notifier).deleteExpense(injection);
               Navigator.pop(context);
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -474,17 +562,24 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: AppTheme.slate500, fontSize: 13)),
+          Expanded(
+            child: Text(
+              label, 
+              style: TextStyle(color: AppTheme.slate400, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
         ],
       ),
     );
   }
 
-  Future<void> _addInjection() async {
+  Future<void> _addInjection(BuildContext context, WidgetRef ref) async {
     final amountController = TextEditingController();
     final descriptionController = TextEditingController();
-    final result = await showDialog<_CapitalInjection>(
+    final result = await showDialog<Expense>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(tr(ref, 'inject_capital')),
@@ -494,12 +589,12 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
             TextField(
               controller: amountController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Amount (XAF)'),
+              decoration: InputDecoration(labelText: tr(ref, 'amount_xaf')),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: descriptionController,
-              decoration: const InputDecoration(labelText: 'Description'),
+              decoration: InputDecoration(labelText: tr(ref, 'description')),
             ),
           ],
         ),
@@ -508,12 +603,13 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           ElevatedButton(
             onPressed: () => Navigator.pop(
               context,
-              _CapitalInjection(
+              Expense(
                 amount: double.tryParse(amountController.text) ?? 0,
                 description: descriptionController.text.isEmpty
-                    ? 'Cash Capital Injection'
+                    ? tr(ref, 'cash_capital_injection')
                     : descriptionController.text,
-                date: DateTime.now(),
+                category: ExpenseCategory.capitalInjection,
+                expenseDate: DateTime.now(),
               ),
             ),
             child: Text(tr(ref, 'add')),
@@ -522,34 +618,19 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
       ),
     );
     if (result == null || result.amount <= 0) return;
-    setState(() => _injections.add(result));
-    await _saveFinanceSettings();
+    await ref.read(expenseProvider.notifier).addExpense(result);
   }
 
-  void _showQuickResume({
-    required double capitalCompletion,
-    required double remainingToRecover,
-    required double realizedProfit,
+  void _showQuickResume(
+    BuildContext context,
+    WidgetRef ref, {
+    required FinancialStats stats,
   }) {
-    final sales = ref.read(saleProvider);
-    final expenses = ref.read(expenseProvider);
-    final totalRevenue = sales.fold(0.0, (sum, item) => sum + item.totalAmount);
-    final stockDeployed = expenses
-        .where((e) => e.category == ExpenseCategory.stock)
-        .fold(0.0, (sum, e) => sum + e.amount);
-    final businessExpenses = expenses
-        .where((e) => e.category == ExpenseCategory.business)
-        .fold(0.0, (sum, e) => sum + e.amount);
-    final personalPayouts = expenses
-        .where((e) => e.category == ExpenseCategory.personalPayout)
-        .fold(0.0, (sum, e) => sum + e.amount);
-    final injectedCapital = _injections.fold(0.0, (sum, i) => sum + i.amount);
-    final capitalPool = _initialCapital + injectedCapital;
-    final cashCapital = max<double>(
-      0,
-      capitalPool - stockDeployed + totalRevenue - businessExpenses - personalPayouts,
-    );
-
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final positiveColor = isDarkMode ? AppTheme.chart5 : Colors.green;
+    final negativeColor = isDarkMode ? AppTheme.chart3 : Colors.red;
+    final orangeColor = isDarkMode ? AppTheme.chart4 : Colors.orange;
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -565,11 +646,10 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Capital Overview Section
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue.withValues(alpha: 0.08),
+                  color: isDarkMode ? AppTheme.primaryBlue.withValues(alpha: 0.2) : AppTheme.primaryBlue.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -583,21 +663,20 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    _buildResumeRow('Capital Pool', CurrencyUtils.format(capitalPool)),
-                    _buildResumeRow('Cash Capital', CurrencyUtils.format(cashCapital)),
-                    _buildResumeRow('Capital Covered', '${(capitalCompletion * 100).toStringAsFixed(1)}%', tooltip: 'Percentage of stock deployed recovered from sales'),
-                    _buildResumeRow('Remaining to Recover', CurrencyUtils.format(remainingToRecover)),
+                    _buildResumeRow(tr(ref, 'capital_pool'), CurrencyUtils.format(stats.capitalPool), isDarkMode: isDarkMode),
+                    _buildResumeRow(tr(ref, 'cash_capital'), CurrencyUtils.format(stats.cashCapital), isDarkMode: isDarkMode),
+                    _buildResumeRow(tr(ref, 'capital_covered'), '${(stats.totalCoverage * 100).toStringAsFixed(1)}%', tooltip: tr(ref, 'capital_covered_help'), isDarkMode: isDarkMode),
+                    _buildResumeRow(tr(ref, 'remaining_to_recover'), CurrencyUtils.format(stats.totalRemainingToRecover), isDarkMode: isDarkMode),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              // Profit Section
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: realizedProfit >= 0 
-                      ? Colors.green.withValues(alpha: 0.08)
-                      : Colors.red.withValues(alpha: 0.08),
+                  color: stats.totalNetProfit >= 0 
+                      ? (isDarkMode ? positiveColor.withValues(alpha: 0.2) : Colors.green.withValues(alpha: 0.08))
+                      : (isDarkMode ? negativeColor.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.08)),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -606,27 +685,26 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                     Row(
                       children: [
                         Icon(
-                          realizedProfit >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                          stats.totalNetProfit >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded,
                           size: 16,
-                          color: realizedProfit >= 0 ? Colors.green : Colors.red,
+                          color: stats.totalNetProfit >= 0 ? positiveColor : negativeColor,
                         ),
                         const SizedBox(width: 6),
                         Text(tr(ref, 'profit_analysis'), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    _buildResumeRow('Realized Profit', CurrencyUtils.format(realizedProfit), isHighlight: true),
-                    _buildResumeRow('Total Revenue', CurrencyUtils.format(totalRevenue)),
-                    _buildResumeRow('Stock Cost', CurrencyUtils.format(stockDeployed)),
+                    _buildResumeRow(tr(ref, 'realized_profit'), CurrencyUtils.format(stats.totalNetProfit), isHighlight: true, isDarkMode: isDarkMode),
+                    _buildResumeRow(tr(ref, 'total_revenue'), CurrencyUtils.format(stats.totalRevenue), isDarkMode: isDarkMode),
+                    _buildResumeRow(tr(ref, 'stock_cost'), CurrencyUtils.format(stats.totalStockDeployed), isDarkMode: isDarkMode),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              // Expenses Breakdown
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.08),
+                  color: isDarkMode ? orangeColor.withValues(alpha: 0.2) : Colors.orange.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -634,14 +712,14 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.receipt_long_rounded, size: 16, color: Colors.orange),
+                        Icon(Icons.receipt_long_rounded, size: 16, color: orangeColor),
                         const SizedBox(width: 6),
                         Text(tr(ref, 'expenses_breakdown'), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    _buildResumeRow('Business Expenses', CurrencyUtils.format(businessExpenses)),
-                    _buildResumeRow('Personal Payouts', CurrencyUtils.format(personalPayouts)),
+                    _buildResumeRow(tr(ref, 'business_expenses'), CurrencyUtils.format(stats.totalBusinessCost), isDarkMode: isDarkMode),
+                    _buildResumeRow(tr(ref, 'personal_payout'), CurrencyUtils.format(stats.totalPayout), isDarkMode: isDarkMode),
                   ],
                 ),
               ),
@@ -655,13 +733,16 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     );
   }
 
-  Widget _buildResumeRow(String label, String value, {bool isHighlight = false, String? tooltip}) {
+  Widget _buildResumeRow(String label, String value, {bool isHighlight = false, String? tooltip, required bool isDarkMode}) {
+    final positiveColor = isDarkMode ? AppTheme.chart5 : Colors.green;
+    final negativeColor = isDarkMode ? AppTheme.chart3 : Colors.red;
+    
     final valueWidget = Text(
       value,
       style: TextStyle(
         fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
         fontSize: 13,
-        color: isHighlight ? (value.startsWith('-') ? Colors.red : Colors.green) : null,
+        color: isHighlight ? (value.startsWith('-') ? negativeColor : positiveColor) : null,
       ),
     );
     
@@ -670,7 +751,14 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: AppTheme.slate500, fontSize: 13)),
+          Expanded(
+            child: Text(
+              label, 
+              style: TextStyle(color: AppTheme.slate400, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
           tooltip != null
               ? Tooltip(
                   message: tooltip,
@@ -682,17 +770,51 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     );
   }
 
-  Future<void> _showWeeklyCheckupDialog({
-    required double stockDeployed,
-    required double totalRevenue,
-    required double businessExpenses,
-    required double personalPayouts,
-    required double recoveredFromSales,
-    required double remainingToRecover,
-    required double realizedProfit,
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  Future<void> _showWeeklyCheckupDialog(
+    BuildContext context,
+    WidgetRef ref, {
+    required FinancialStats stats,
   }) async {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final orangeColor = isDarkMode ? AppTheme.chart4 : Colors.orange;
     final notesController = TextEditingController();
     final payoutController = TextEditingController(text: '0');
+
+    // Calculate previous week's stats
+    final now = DateTime.now();
+    final previousWeekEnd = WeeklyCheckup.getWeekStartDate(now).subtract(const Duration(days: 1));
+    final previousWeekStart = WeeklyCheckup.getWeekStartDate(previousWeekEnd);
+    
+    final rawSales = ref.read(saleProvider);
+    final allExpenses = ref.read(expenseProvider);
+    
+    final weekSales = rawSales.where((s) => 
+      (s.saleDate.isAfter(previousWeekStart) || s.saleDate.isAtSameMomentAs(previousWeekStart)) &&
+      s.saleDate.isBefore(previousWeekEnd.add(const Duration(days: 1))) &&
+      s.deletedAt == null
+    ).toList();
+    
+    final weekExpenses = allExpenses.where((e) => 
+      e.expenseDate.isAfter(previousWeekStart) || e.expenseDate.isAtSameMomentAs(previousWeekStart)
+    ).toList();
+
+    final revenue = weekSales.where((s) => s.isPaid).fold<double>(0, (sum, s) => sum + s.totalAmount);
+    final weekStockExpenses = weekExpenses.where((e) => e.category == ExpenseCategory.stock);
+    final weekBusinessExpenses = weekExpenses.where((e) => e.category == ExpenseCategory.business);
+    final weekPayouts = weekExpenses.where((e) => e.category == ExpenseCategory.personalPayout);
+
+    final stockDeployed = weekStockExpenses.fold<double>(0, (sum, e) => sum + e.amount);
+    final businessCost = weekBusinessExpenses.fold<double>(0, (sum, e) => sum + e.amount);
+    final payout = weekPayouts.fold<double>(0, (sum, e) => sum + e.amount);
+
+    final recoveredFromSales = stockDeployed <= 0 ? 0.0 : (revenue < stockDeployed ? revenue : stockDeployed);
+    final remainingToRecover = stockDeployed - recoveredFromSales;
+    final netProfit = revenue - stockDeployed - businessCost - payout;
+    final salesCount = weekSales.where((s) => s.isPaid).length;
 
     await showDialog(
       context: context,
@@ -709,33 +831,33 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryBlue.withValues(alpha: 0.08),
+                      color: isDarkMode ? AppTheme.primaryBlue.withValues(alpha: 0.2) : AppTheme.primaryBlue.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(tr(ref, 'this_week_summary'), style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text('${tr(ref, 'previous_week')} (${_formatDate(previousWeekStart)} - ${_formatDate(previousWeekEnd)})', style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
                         const SizedBox(height: 8),
-                        _buildResumeRow('Stock Purchased', CurrencyUtils.format(stockDeployed)),
-                        _buildResumeRow('Sales Revenue', CurrencyUtils.format(totalRevenue)),
-                        _buildResumeRow('Business Expenses', CurrencyUtils.format(businessExpenses)),
-                        _buildResumeRow('Personal Payouts', CurrencyUtils.format(personalPayouts)),
+                        _buildResumeRow(tr(ref, 'stock_purchased'), CurrencyUtils.format(stockDeployed), isDarkMode: isDarkMode),
+                        _buildResumeRow(tr(ref, 'sales_revenue'), CurrencyUtils.format(revenue), isDarkMode: isDarkMode),
+                        _buildResumeRow(tr(ref, 'business_expenses'), CurrencyUtils.format(businessCost), isDarkMode: isDarkMode),
+                        _buildResumeRow(tr(ref, 'personal_payout'), CurrencyUtils.format(payout), isDarkMode: isDarkMode),
                         const SizedBox(height: 4),
-                        _buildResumeRow('Recovered from Sales', CurrencyUtils.format(recoveredFromSales), isHighlight: true),
-                        _buildResumeRow('Remaining to Recover', CurrencyUtils.format(remainingToRecover)),
-                        _buildResumeRow('Realized Profit', CurrencyUtils.format(realizedProfit), isHighlight: true),
+                        _buildResumeRow(tr(ref, 'recovered_from_sales'), CurrencyUtils.format(recoveredFromSales), isHighlight: true, isDarkMode: isDarkMode),
+                        _buildResumeRow(tr(ref, 'remaining_to_recover'), CurrencyUtils.format(remainingToRecover), isDarkMode: isDarkMode),
+                        _buildResumeRow(tr(ref, 'realized_profit'), CurrencyUtils.format(netProfit), isHighlight: true, isDarkMode: isDarkMode),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text(tr(ref, 'profit_distribution'), style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(tr(ref, 'profit_distribution'), style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: payoutController,
-                    decoration: const InputDecoration(
-                      labelText: 'Profit Payout (take as salary)',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: tr(ref, 'profit_payout'),
+                      border: const OutlineInputBorder(),
                       suffixText: 'XAF',
                     ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -746,16 +868,16 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.08),
+                      color: isDarkMode ? orangeColor.withValues(alpha: 0.2) : Colors.orange.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.info_outline_rounded, size: 16),
+                        Icon(Icons.info_outline_rounded, size: 16, color: orangeColor),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            'Available profit: ${CurrencyUtils.format(realizedProfit)}',
+                            '${tr(ref, 'available_profit')}: ${CurrencyUtils.format(netProfit)}',
                             style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                           ),
                         ),
@@ -765,9 +887,9 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: notesController,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes (optional)',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: '${tr(ref, 'notes')} (${tr(ref, 'optional')})',
+                      border: const OutlineInputBorder(),
                     ),
                     maxLines: 2,
                   ),
@@ -784,42 +906,36 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
               onPressed: () async {
                 final payout = double.tryParse(payoutController.text) ?? 0;
                 
-                if (payout > realizedProfit) {
+                if (payout > netProfit) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(tr(ref, 'payout_exceed_profit'))),
                   );
                   return;
                 }
 
-                // Create weekly checkup record
-                final now = DateTime.now();
-                final weekStart = WeeklyCheckup.getWeekStartDate(now);
-                final weekEnd = WeeklyCheckup.getWeekEndDate(now);
-                
                 final checkup = WeeklyCheckup()
-                  ..weekStartDate = weekStart
-                  ..weekEndDate = weekEnd
+                  ..weekStartDate = previousWeekStart
+                  ..weekEndDate = previousWeekEnd
                   ..totalStockPurchased = stockDeployed
-                  ..totalSalesRevenue = totalRevenue
-                  ..totalBusinessExpenses = businessExpenses
-                  ..totalPersonalPayouts = personalPayouts
+                  ..totalSalesRevenue = revenue
+                  ..totalBusinessExpenses = businessCost
+                  ..totalPersonalPayouts = payout
                   ..capitalRecovered = recoveredFromSales
                   ..capitalRemaining = remainingToRecover
-                  ..realizedProfit = realizedProfit
+                  ..realizedProfit = netProfit
                   ..profitPayoutTaken = payout
-                  ..profitReinjected = 0 // No reinject option anymore
+                  ..profitReinjected = 0
+                  ..salesCount = salesCount
                   ..notes = notesController.text;
 
                 await ref.read(weeklyCheckupProvider.notifier).addCheckup(checkup);
 
-                // If taking payout, create a personalPayout expense
                 if (payout > 0) {
                   final payoutExpense = Expense()
-                    ..description = 'Weekly checkup payout'
+                    ..description = tr(ref, 'weekly_payout_desc')
                     ..amount = payout
                     ..category = ExpenseCategory.personalPayout
-                    ..notes = notesController.text
-                    ..operationId = const Uuid().v4();
+                    ..notes = notesController.text;
                   await ref.read(expenseProvider.notifier).addExpense(payoutExpense);
                 }
 
@@ -833,28 +949,4 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
       ),
     );
   }
-}
-
-class _CapitalInjection {
-  final double amount;
-  final String description;
-  final DateTime date;
-
-  _CapitalInjection({
-    required this.amount,
-    required this.description,
-    required this.date,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'amount': amount,
-        'description': description,
-        'date': date.toIso8601String(),
-      };
-
-  factory _CapitalInjection.fromJson(Map<String, dynamic> json) => _CapitalInjection(
-        amount: (json['amount'] as num).toDouble(),
-        description: json['description'] as String? ?? 'Capital Injection',
-        date: DateTime.parse(json['date'] as String),
-      );
 }

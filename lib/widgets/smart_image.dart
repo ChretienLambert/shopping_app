@@ -59,16 +59,24 @@ class SmartImage extends StatelessWidget {
       );
     } else {
       // Local file path
-      imageWidget = Image.file(
-        File(imagePath!),
-        width: width,
-        height: height,
-        fit: fit,
-        cacheWidth: targetCacheWidth,
-        cacheHeight: targetCacheHeight,
-        filterQuality: FilterQuality.low,
-        errorBuilder: (context, error, stackTrace) => _buildPlaceholder(error: true),
-      );
+      try {
+        final file = File(imagePath!);
+        if (!file.existsSync()) {
+          return _buildPlaceholder(error: true);
+        }
+        imageWidget = Image.file(
+          file,
+          width: width,
+          height: height,
+          fit: fit,
+          cacheWidth: targetCacheWidth,
+          cacheHeight: targetCacheHeight,
+          filterQuality: FilterQuality.low,
+          errorBuilder: (context, error, stackTrace) => _buildPlaceholder(error: true),
+        );
+      } catch (e) {
+        return _buildPlaceholder(error: true);
+      }
     }
 
     return ClipRRect(

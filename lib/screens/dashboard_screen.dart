@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/expense.dart';
+import '../models/weekly_checkup.dart';
+import '../repositories/weekly_checkup_repository.dart';
 import '../providers/expense_provider.dart';
 import '../providers/product_provider.dart';
 import '../providers/sale_provider.dart';
+import '../providers/financial_stats_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_localization.dart';
 import '../utils/currency_utils.dart';
-import 'finance_screen.dart';
-import 'sales_screen.dart';
-import 'expenses_screen.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -19,6 +18,9 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  WeeklyCheckup? _lastWeek;
+  final _checkupRepo = WeeklyCheckupRepository();
+
   @override
   void initState() {
     super.initState();
@@ -29,228 +31,439 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     await ref.read(saleProvider.notifier).loadSales();
     await ref.read(expenseProvider.notifier).loadExpenses();
     await ref.read(productProvider.notifier).loadProducts();
+    
+    final reports = await _checkupRepo.getAll();
+    if (mounted) {
+      setState(() {
+        _lastWeek = reports.isNotEmpty ? reports.first : null;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final sales = ref.watch(saleProvider);
-    final expenses = ref.watch(expenseProvider);
-    final products = ref.watch(productProvider);
-
-    final revenue = sales.fold<double>(0, (sum, s) => sum + s.totalAmount);
-    final stockDeployed = expenses
-        .where((e) => e.category == ExpenseCategory.stock)
-        .fold<double>(0, (sum, e) => sum + e.amount);
-    final businessCost = expenses
-        .where((e) => e.category == ExpenseCategory.business)
-        .fold<double>(0, (sum, e) => sum + e.amount);
-    final payout = expenses
-        .where((e) => e.category == ExpenseCategory.personalPayout)
-        .fold<double>(0, (sum, e) => sum + e.amount);
-    
-    // Recovered from sales: sales revenue up to the amount of stock deployed
-    final recoveredFromSales = revenue < stockDeployed ? revenue : stockDeployed;
-    final remainingToRecover = stockDeployed - recoveredFromSales;
-    
-    // Profit only starts after stock deployed is fully recovered
-    final salesAfterRecovery = revenue - recoveredFromSales;
-    final availableProfit = (salesAfterRecovery - businessCost - payout).clamp(0, double.infinity).toDouble();
-    
-    // Coverage: % of stock deployed recovered from sales
-    final coverage = stockDeployed <= 0 ? 0.0 : (recoveredFromSales / stockDeployed).clamp(0, 1).toDouble();
-    final pendingDeliveries = sales.where((s) => s.isDelivery && !s.isPaid).length;
-    final lowStock = products.where((p) => p.stockQuantity < 10).length;
-
-    final recent = [
-      ...sales.map((s) => {'date': s.saleDate, 'label': 'Sale', 'amount': s.totalAmount, 'type': 'sale', 'id': s.id}),
-      ...expenses.map((e) => {'date': e.expenseDate, 'label': e.description, 'amount': -e.amount, 'type': 'expense', 'id': e.id}),
-    ]..sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+    final stats = ref.watch(financialStatsProvider);
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
       body: RefreshIndicator(
         onRefresh: _loadData,
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(24),
           children: [
-            // Quick Actions Section (Top)
+            // Top Welcome Header
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showQuickResume(availableProfit, coverage, revenue, stockDeployed, recoveredFromSales, remainingToRecover),
-                    icon: const Icon(Icons.summarize_outlined),
-                    label: Text(tr(ref, 'quick_resume')),
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tr(ref, 'financial_health'),
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    Text(
+                      tr(ref, 'real_time_performance'),
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FinanceScreen())),
-                    icon: const Icon(Icons.add_circle_outline_rounded),
-                    label: Text(tr(ref, 'inject_capital')),
-                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
-                  ),
-                ),
+                // Add Capital button removed from dashboard as requested
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 32),
             
-            Text(
-              tr(ref, 'financial_health'),
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
+            // Financial Resume Section (Moved from Finance Screen)
+            _buildFinancialResumeSection(stats),
+            const SizedBox(height: 32),
+
+            // KPI Grid
+            GridView.count(
+              crossAxisCount: MediaQuery.of(context).size.width > 1200 ? 4 : 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 16,
+              childAspectRatio: MediaQuery.of(context).size.width > 1200 ? 2.5 : 1.8,
               children: [
-                _kpiCard(tr(ref, 'total_revenue'), CurrencyUtils.format(revenue), Icons.trending_up_rounded),
-                _kpiCard(tr(ref, 'stock_deployed'), CurrencyUtils.format(stockDeployed), Icons.inventory_2_rounded),
-                _kpiCard(tr(ref, 'available_profit'), CurrencyUtils.format(availableProfit), Icons.savings_rounded),
+                _buildModernKPI(
+                  tr(ref, 'total_revenue'), 
+                  CurrencyUtils.format(stats.revenue), 
+                  Icons.arrow_upward_rounded,
+                  isDarkMode ? AppTheme.chart5 : Colors.green,
+                ),
+                _buildModernKPI(
+                  tr(ref, 'sales_count'), 
+                  '${stats.salesCount} ${tr(ref, 'sales')}', 
+                  Icons.shopping_cart_outlined,
+                  isDarkMode ? AppTheme.chart4 : Colors.orange,
+                  subtitle: stats.pendingDeliveries > 0 ? '${stats.pendingDeliveries} ${tr(ref, 'pending')}' : null,
+                ),
+                _buildModernKPI(
+                  tr(ref, 'stock_deployed'), 
+                  CurrencyUtils.format(stats.stockDeployed), 
+                  Icons.inventory_2_outlined,
+                  AppTheme.primary,
+                ),
+                _buildModernKPI(
+                  tr(ref, 'available_profit'), 
+                  CurrencyUtils.format(stats.availableProfit), 
+                  Icons.account_balance_wallet_outlined,
+                  AppTheme.primaryBlue,
+                ),
               ],
             ),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.4)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(tr(ref, 'capital_coverage'), style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  Text('${tr(ref, 'stock_deployed')}: ${CurrencyUtils.format(stockDeployed)}'),
-                  Text('${tr(ref, 'recovered_from_sales')}: ${CurrencyUtils.format(recoveredFromSales)}'),
-                  Text('${tr(ref, 'remaining_to_recover')}: ${CurrencyUtils.format(remainingToRecover)}'),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(value: coverage),
-                  const SizedBox(height: 6),
-                  Text('${(coverage * 100).toStringAsFixed(1)}%'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 32),
+
+            // Performance Section
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: _simpleCard(
-                    tr(ref, 'pending_deliveries'),
-                    pendingDeliveries.toString(),
-                    Icons.local_shipping_outlined,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _simpleCard(
-                    tr(ref, 'low_stock_items'),
-                    lowStock.toString(),
-                    Icons.warning_amber_rounded,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              tr(ref, 'recent_activity'),
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            if (recent.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(tr(ref, 'no_activity')),
-              )
-            else
-              ...recent.take(8).map(
-                    (r) => ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(r['label'].toString()),
-                      subtitle: Text((r['date'] as DateTime).toLocal().toString().split('.').first),
-                      trailing: Text(
-                        CurrencyUtils.format((r['amount'] as num).toDouble()),
-                        style: TextStyle(
-                          color: (r['amount'] as num) >= 0 ? Colors.green : Colors.red,
-                          fontWeight: FontWeight.w600,
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(tr(ref, 'capital_coverage'), style: Theme.of(context).textTheme.titleLarge),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.4)),
+                        ),
+                        child: Column(
+                          children: [
+                            _buildProgressRow(tr(ref, 'stock_deployed'), stats.stockDeployed, isDarkMode ? AppTheme.slate400 : Colors.grey),
+                            const SizedBox(height: 12),
+                            _buildProgressRow(tr(ref, 'recovered'), stats.recoveredFromSales, isDarkMode ? AppTheme.chart5 : Colors.green),
+                            const SizedBox(height: 24),
+                            Tooltip(
+                              message: tr(ref, 'capital_energy_desc'),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: LinearProgressIndicator(
+                                  value: stats.coverage,
+                                  minHeight: 12,
+                                  backgroundColor: isDarkMode ? AppTheme.slate800 : AppTheme.secondary,
+                                  color: AppTheme.primary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('${(stats.coverage * 100).toStringAsFixed(1)}% ${tr(ref, 'recovered')}', 
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
+                                Text('${tr(ref, 'remaining')}: ${CurrencyUtils.format(stats.remainingToRecover)}',
+                                  style: Theme.of(context).textTheme.labelLarge),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                      onTap: () => _navigateToDetail(r['type'] as String, r['id'] as int),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 24),
+                if (_lastWeek != null)
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(tr(ref, 'previous_week'), style: Theme.of(context).textTheme.titleLarge),
+                        const SizedBox(height: 16),
+                        _buildLastWeekSummary(isDarkMode),
+                      ],
                     ),
                   ),
+              ],
+            ),
+            
+            const SizedBox(height: 32),
+            Text(tr(ref, 'recent_activity'), style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            _buildRecentActivityList(stats.recentActivity),
           ],
         ),
       ),
     );
   }
 
-  void _navigateToDetail(String type, int id) {
-    // Navigate to appropriate screen and select the item
-    // For now, navigate to the screen - detailed selection would require additional state management
-    if (type == 'sale') {
-      // Navigate to sales screen
-      // Note: To highlight specific sale, you'd need to pass the sale ID to the sales screen
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const SalesScreen()));
-    } else if (type == 'expense') {
-      // Navigate to expenses screen
-      // Note: To highlight specific expense, you'd need to pass the expense ID to the expenses screen
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const ExpensesScreen()));
-    }
+  Widget _buildFinancialResumeSection(FinancialStats stats) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(tr(ref, 'financial_resume'), style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Theme.of(context).dividerColor),
+          ),
+          child: Column(
+            children: [
+              _buildResumeRow(tr(ref, 'capital_overview'), [
+                {'label': tr(ref, 'capital_pool'), 'value': stats.capitalPool},
+                {'label': tr(ref, 'cash_capital'), 'value': stats.cashCapital},
+                {'label': tr(ref, 'assets_capital'), 'value': stats.assetsCapital},
+              ]),
+              const Divider(height: 32),
+              _buildResumeRow(tr(ref, 'profit_analysis'), [
+                {'label': tr(ref, 'sales_count'), 'value': stats.salesCount, 'isRaw': true},
+                {'label': tr(ref, 'revenue'), 'value': stats.revenue},
+                {'label': tr(ref, 'stock_cost'), 'value': stats.stockDeployed},
+                {'label': tr(ref, 'operational_expenses'), 'value': stats.businessCost},
+                {'label': tr(ref, 'net_profit'), 'value': stats.netProfit},
+              ]),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
-  void _showQuickResume(double profit, double coverage, double revenue, double stockDeployed, double recoveredFromSales, double remainingToRecover) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(tr(ref, 'quick_resume')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${tr(ref, 'available_profit')}: ${CurrencyUtils.format(profit)}'),
-            const SizedBox(height: 8),
-            Text('${tr(ref, 'stock_deployed')}: ${CurrencyUtils.format(stockDeployed)}'),
-            Text('${tr(ref, 'recovered_from_sales')}: ${CurrencyUtils.format(recoveredFromSales)}'),
-            Text('${tr(ref, 'remaining_to_recover')}: ${CurrencyUtils.format(remainingToRecover)}'),
-            Text('${tr(ref, 'capital_coverage')}: ${(coverage * 100).toStringAsFixed(1)}%'),
-            const SizedBox(height: 8),
-            Text('${tr(ref, 'total_revenue')}: ${CurrencyUtils.format(revenue)}'),
-          ],
+  Widget _buildResumeRow(String title, List<Map<String, dynamic>> items) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        const SizedBox(height: 12),
+        ...items.map((item) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(child: Text(item['label'], style: Theme.of(context).textTheme.bodyMedium, overflow: TextOverflow.ellipsis)),
+                  const SizedBox(width: 8),
+                  Text(
+                    item['isRaw'] == true 
+                      ? item['value'].toString() 
+                      : CurrencyUtils.format(item['value']), 
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            )),
+      ],
+    );
+  }
+
+  Widget _buildModernKPI(String label, String value, IconData icon, Color color, {String? subtitle}) {
+    bool isHovered = false;
+    return StatefulBuilder(
+      builder: (context, setState) {
+        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => isHovered = true),
+          onExit: (_) => setState(() => isHovered = false),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isHovered ? color.withValues(alpha: 0.5) : Theme.of(context).colorScheme.outline.withValues(alpha: 0.4)),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: isHovered ? 0.1 : 0.05),
+                  blurRadius: isHovered ? 15 : 10,
+                  offset: Offset(0, isHovered ? 6 : 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: isDarkMode ? (isHovered ? 0.3 : 0.2) : (isHovered ? 0.2 : 0.1)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: color, size: 22),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(label, 
+                          style: Theme.of(context).textTheme.labelLarge?.copyWith(fontSize: 11),
+                          maxLines: 1,
+                        ),
+                      ),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(value, 
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
+                          maxLines: 1,
+                        ),
+                      ),
+                      if (subtitle != null)
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(subtitle, 
+                            style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600),
+                            maxLines: 1,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    );
+  }
+
+  Widget _buildProgressRow(String label, double amount, Color color) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Text(
+            label, 
+            style: Theme.of(context).textTheme.bodyMedium, 
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr(ref, 'close'))),
+        const SizedBox(width: 8),
+        Text(CurrencyUtils.format(amount), style: const TextStyle(fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+
+  Widget _buildLastWeekSummary(bool isDarkMode) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppTheme.primary,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.history, color: Colors.white70, size: 20),
+              const SizedBox(width: 8),
+              Text(tr(ref, 'week_summary'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _summaryItem(tr(ref, 'revenue'), CurrencyUtils.format(_lastWeek!.totalSalesRevenue)),
+          const Divider(color: Colors.white24, height: 24),
+          _summaryItem(tr(ref, 'profit'), CurrencyUtils.format(_lastWeek!.realizedProfit)),
+          const Divider(color: Colors.white24, height: 24),
+          _summaryItem(tr(ref, 'sales_count'), _lastWeek!.salesCount.toString()),
         ],
       ),
     );
   }
 
-  Widget _kpiCard(String title, String value, IconData icon) {
-    return SizedBox(
-      width: 230,
-      child: _simpleCard(title, value, icon),
+  Widget _summaryItem(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white70)),
+        Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+      ],
     );
   }
 
-  Widget _simpleCard(String title, String value, IconData icon) {
-    return Builder(
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.4)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: AppTheme.primaryBlue, size: 20),
-            const SizedBox(height: 8),
-            Text(title, style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
-          ],
+  Widget _buildRecentActivityList(List<Map<String, dynamic>> activities) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    if (activities.isEmpty) {
+      return Container(
+        height: 100,
+        alignment: Alignment.center,
+        child: Text(tr(ref, 'no_activity'), style: Theme.of(context).textTheme.bodyMedium),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        children: activities.take(5).map((activity) {
+          final isSale = activity['type'] == 'sale';
+          return _ActivityListTile(activity: activity, isSale: isSale);
+        }).toList(),
+      ),
+    );
+  }
+}
+
+class _ActivityListTile extends ConsumerStatefulWidget {
+  final Map<String, dynamic> activity;
+  final bool isSale;
+
+  const _ActivityListTile({required this.activity, required this.isSale});
+
+  @override
+  ConsumerState<_ActivityListTile> createState() => _ActivityListTileState();
+}
+
+class _ActivityListTileState extends ConsumerState<_ActivityListTile> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final positiveColor = isDarkMode ? AppTheme.chart5 : Colors.green;
+    final negativeColor = isDarkMode ? AppTheme.chart3 : Colors.red;
+    
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        color: _isHovered ? AppTheme.primaryBlue.withValues(alpha: isDarkMode ? 0.15 : 0.05) : Colors.transparent,
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          leading: CircleAvatar(
+            backgroundColor: isDarkMode ? AppTheme.slate700 : AppTheme.secondary,
+            child: Icon(
+              widget.isSale ? Icons.shopping_bag_outlined : Icons.receipt_long_outlined,
+              color: AppTheme.primary,
+              size: 20,
+            ),
+          ),
+          title: Text(
+            widget.isSale ? tr(ref, 'sale') : widget.activity['label'].toString(),
+            style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface),
+          ),
+          subtitle: Text(
+            (widget.activity['date'] as DateTime).toString().split(' ').first,
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          trailing: Text(
+            CurrencyUtils.format((widget.activity['amount'] as num).toDouble()),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: widget.isSale ? positiveColor : negativeColor,
+            ),
+          ),
+          onTap: () {
+             // Future: Navigate to detail
+          },
         ),
       ),
     );

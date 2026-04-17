@@ -1,28 +1,64 @@
 import 'package:uuid/uuid.dart';
+import 'package:hive/hive.dart';
 
+part 'weekly_checkup.g.dart';
+
+@HiveType(typeId: 5)
 class WeeklyCheckup {
+  @HiveField(0)
   String id;
+  @HiveField(1)
   String? userId;
+  @HiveField(2)
   String? serverId;
+  @HiveField(3)
   bool isDirty;
+  @HiveField(4)
   DateTime? lastSyncedAt;
+  @HiveField(5)
   DateTime weekStartDate;
+  @HiveField(6)
   DateTime weekEndDate;
+  @HiveField(7)
   DateTime checkupDate;
+  @HiveField(8)
   double totalStockPurchased;
+  @HiveField(9)
   double totalSalesRevenue;
+  @HiveField(10)
   double totalBusinessExpenses;
+  @HiveField(11)
   double totalPersonalPayouts;
+  @HiveField(12)
   double capitalRecovered;
+  @HiveField(13)
   double capitalRemaining;
+  @HiveField(14)
   double realizedProfit;
+  @HiveField(15)
   double profitPayoutTaken;
+  @HiveField(16)
   double profitReinjected;
+  @HiveField(17)
   String? notes;
+  @HiveField(18)
   DateTime createdAt;
+  @HiveField(19)
   DateTime updatedAt;
+  @HiveField(20)
   DateTime? deletedAt;
+  @HiveField(21)
   String? operationId;
+
+  // Analytics fields
+  @HiveField(22)
+  int salesCount;
+  @HiveField(23)
+  int stockItemsCount;
+  @HiveField(24)
+  Map<String, double>? categoryRevenue;
+  @HiveField(25)
+  List<Map<String, dynamic>>? topProducts;
 
   WeeklyCheckup({
     String? id,
@@ -47,6 +83,10 @@ class WeeklyCheckup {
     DateTime? updatedAt,
     this.deletedAt,
     this.operationId,
+    this.salesCount = 0,
+    this.stockItemsCount = 0,
+    this.categoryRevenue,
+    this.topProducts,
   })  : id = id ?? const Uuid().v4(),
         weekStartDate = weekStartDate ?? DateTime.now(),
         weekEndDate = weekEndDate ?? DateTime.now(),
@@ -93,6 +133,10 @@ class WeeklyCheckup {
         'updatedAt': updatedAt.toIso8601String(),
         'deletedAt': deletedAt?.toIso8601String(),
         'operationId': operationId,
+        'salesCount': salesCount,
+        'stockItemsCount': stockItemsCount,
+        'categoryRevenue': categoryRevenue,
+        'topProducts': topProducts,
       };
 
   factory WeeklyCheckup.fromJson(Map<dynamic, dynamic> json) => WeeklyCheckup(
@@ -118,5 +162,11 @@ class WeeklyCheckup {
         updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
         deletedAt: json['deletedAt'] != null ? DateTime.parse(json['deletedAt']) : null,
         operationId: json['operationId'],
+        salesCount: json['salesCount'] ?? 0,
+        stockItemsCount: json['stockItemsCount'] ?? 0,
+        categoryRevenue: (json['categoryRevenue'] as Map?)?.cast<String, double>(),
+        topProducts: (json['topProducts'] as List?)
+            ?.map((e) => (e as Map).cast<String, dynamic>())
+            .toList(),
       );
 }

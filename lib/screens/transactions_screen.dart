@@ -157,8 +157,8 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: AppTheme.destructive,
-          child: const Icon(Icons.shopping_cart, color: Colors.white, size: 20),
+          backgroundColor: _getCategoryColor(expense.category),
+          child: Icon(_getCategoryIcon(expense.category), color: Colors.white, size: 20),
         ),
         title: Text(
           expense.description,
@@ -166,15 +166,41 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         ),
         subtitle: Text('${_formatDate(expense.expenseDate)} • ${_getCategoryName(expense.category)}'),
         trailing: Text(
-          '-${expense.amount.toInt().toString()} XAF',
-          style: const TextStyle(
+          '${expense.category == ExpenseCategory.capitalInjection ? '+' : '-'}${expense.amount.toInt().toString()} XAF',
+          style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: AppTheme.destructive,
+            color: expense.category == ExpenseCategory.capitalInjection ? Colors.green : AppTheme.destructive,
             fontSize: 16,
           ),
         ),
       ),
     );
+  }
+
+  IconData _getCategoryIcon(ExpenseCategory category) {
+    switch (category) {
+      case ExpenseCategory.stock:
+        return Icons.inventory_2_rounded;
+      case ExpenseCategory.business:
+        return Icons.business_center_rounded;
+      case ExpenseCategory.personalPayout:
+        return Icons.payments_rounded;
+      case ExpenseCategory.capitalInjection:
+        return Icons.add_chart_rounded;
+    }
+  }
+
+  Color _getCategoryColor(ExpenseCategory category) {
+    switch (category) {
+      case ExpenseCategory.stock:
+        return AppTheme.chart2;
+      case ExpenseCategory.business:
+        return AppTheme.chart5;
+      case ExpenseCategory.personalPayout:
+        return AppTheme.destructive;
+      case ExpenseCategory.capitalInjection:
+        return Colors.green;
+    }
   }
 
   String _formatDate(DateTime date) {
@@ -189,6 +215,8 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         return 'Business Expense';
       case ExpenseCategory.personalPayout:
         return 'Personal Payout';
+      case ExpenseCategory.capitalInjection:
+        return 'Capital Injection';
     }
   }
 }

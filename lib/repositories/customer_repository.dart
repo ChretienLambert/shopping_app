@@ -21,7 +21,11 @@ class CustomerRepository {
     customer.updatedAt = DateTime.now();
     
     await box.put(customer.id, customer.toJson());
-    await syncOne(customer);
+
+    // Auto-sync disabled as per request
+    // if (_supabase.auth.currentUser != null) {
+    //   await syncOne(customer);
+    // }
   }
 
   Future<void> syncOne(Customer customer) async {
@@ -35,7 +39,8 @@ class CustomerRepository {
       }
 
       final data = {
-        'server_id': customer.serverId,
+        'id': customer.id,
+        'server_id': customer.serverId ?? customer.id,
         'user_id': currentUser.id,
         'name': customer.name,
         'phone_number': customer.phoneNumber,
@@ -46,8 +51,13 @@ class CustomerRepository {
         'updated_at': customer.updatedAt.toIso8601String(),
       };
 
-      await _supabase.from('customers').upsert(data, onConflict: 'server_id');
+      final response = await _supabase
+          .from('customers')
+          .upsert(data, onConflict: 'server_id')
+          .select()
+          .single();
 
+      customer.serverId = response['server_id'];
       customer.isDirty = false;
       customer.lastSyncedAt = DateTime.now();
       
@@ -69,14 +79,19 @@ class CustomerRepository {
     customer.isDirty = true;
     
     await box.put(customer.id, customer.toJson());
-    await syncOne(customer);
+
+    // Auto-sync disabled as per request
+    // if (_supabase.auth.currentUser != null) {
+    //   await syncOne(customer);
+    // }
   }
 
   Future<void> syncDirty() async {
     final box = _hive.customersBox;
     final dirtyRecords = box.values
+        .whereType<Map>()
         .map((c) => Customer.fromJson(c))
-        .where((c) => c.isDirty)
+        .where((c) => c.isDirty && c.id.isNotEmpty)
         .toList();
     
     if (dirtyRecords.isEmpty) return;
@@ -87,11 +102,16 @@ class CustomerRepository {
     }
   }
 
-  Future<void> pullAll() async {
+  Future<void> pullAll({DateTime? lastSync}) async {
     try {
       final box = _hive.customersBox;
-      final response = await _supabase.from('customers').select();
+      var query = _supabase.from('customers').select();
       
+      if (lastSync != null) {
+        query = query.gt('updated_at', lastSync.toIso8601String());
+      }
+      
+      final response = await query;
       final List<dynamic> remoteData = response;
       
       for (var data in remoteData) {

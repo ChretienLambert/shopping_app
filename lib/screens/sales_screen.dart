@@ -43,14 +43,14 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'No sales yet',
+                    tr(ref, 'no_sales_yet'),
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           color: Colors.grey[600],
                         ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Tap + to record your first sale',
+                    tr(ref, 'tap_to_add_sale'),
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Colors.grey[500],
                         ),
@@ -243,12 +243,15 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     double discountPercent = 0;
     final notesController = TextEditingController();
     final deliveryAddressController = TextEditingController();
+    String searchQuery = '';
+    bool isSaving = false;
 
     await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(isDelivery ? 'New Delivery Sale' : 'Direct Store Sale'),
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text(isDelivery ? tr(ref, 'new_delivery_sale') : tr(ref, 'direct_store_sale')),
           content: SizedBox(
             width: 400,
             child: SingleChildScrollView(
@@ -261,10 +264,10 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                       Expanded(
                         child: DropdownButtonFormField<Customer>(
                           isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Select Customer',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.person_outline),
+                          decoration: InputDecoration(
+                            labelText: tr(ref, 'select_customer'),
+                            border: const OutlineInputBorder(),
+                            prefixIcon: const Icon(Icons.person_outline),
                           ),
                           items: ref.watch(customerProvider).map((customer) {
                             return DropdownMenuItem(
@@ -309,7 +312,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
-                                  'Regular client (${stats['completedSales']} purchases)',
+                                  '${tr(ref, 'regular_client')} (${stats['completedSales']} ${tr(ref, 'purchases')})',
                                   style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.green),
                                 ),
                               ),
@@ -322,8 +325,8 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                     DropdownButtonFormField<double>(
                       initialValue: discountPercent,
                       decoration: InputDecoration(
-                        labelText: 'Optional Discount',
-                        border: OutlineInputBorder(),
+                        labelText: tr(ref, 'optional_discount'),
+                        border: const OutlineInputBorder(),
                       ),
                       items: [
                         DropdownMenuItem(value: 0.0, child: Text(tr(ref, 'no_discount'))),
@@ -341,82 +344,137 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                     const SizedBox(height: 16),
                     TextField(
                       controller: deliveryAddressController,
-                      decoration: const InputDecoration(
-                        labelText: 'Delivery Address',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.location_on_outlined),
+                      decoration: InputDecoration(
+                        labelText: tr(ref, 'delivery_address'),
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.location_on_outlined),
                       ),
                     ),
                   ],
                   const SizedBox(height: 16),
                   TextField(
                     controller: notesController,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes (Optional)',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.notes),
+                    decoration: InputDecoration(
+                      labelText: '${tr(ref, 'notes')} (${tr(ref, 'optional')})',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.notes),
                     ),
                   ),
                   const SizedBox(height: 24),
                   Text(tr(ref, 'inventory_selection'), style: const TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Container(
-                    height: 250,
+                    height: 350,
                     decoration: BoxDecoration(
                       border: Border.all(color: AppTheme.slate200),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      itemCount: products.where((p) => p.stockQuantity > 0).length,
-                      separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.slate100),
-                      itemBuilder: (context, index) {
-                        final productFiltered = products.where((p) => p.stockQuantity > 0).toList();
-                        final product = productFiltered[index];
-                        final existingIndex = saleItems.indexWhere((i) => i.productId == product.id);
-                        final quantity = existingIndex != -1 ? saleItems[existingIndex].quantity : 0;
-                        
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                          title: Text(product.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                          subtitle: Text('${CurrencyUtils.format(product.price)} • Stock: ${product.stockQuantity}', style: const TextStyle(fontSize: 11)),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.remove_circle, color: Colors.red, size: 24),
-                                onPressed: quantity > 0 ? () => setState(() {
-                                  final idx = saleItems.indexWhere((i) => i.productId == product.id);
-                                  if (saleItems[idx].quantity > 1) {
-                                    saleItems[idx].quantity--;
-                                    saleItems[idx].totalPrice = saleItems[idx].quantity * saleItems[idx].unitPrice;
-                                  } else {
-                                    saleItems.removeAt(idx);
-                                  }
-                                }) : null,
-                              ),
-                              Text('$quantity', style: const TextStyle(fontWeight: FontWeight.bold)),
-                              IconButton(
-                                icon: const Icon(Icons.add_circle, color: Colors.green, size: 24),
-                                onPressed: product.stockQuantity > quantity ? () => setState(() {
-                                  final idx = saleItems.indexWhere((i) => i.productId == product.id);
-                                  if (idx != -1) {
-                                    saleItems[idx].quantity++;
-                                    saleItems[idx].totalPrice = saleItems[idx].quantity * saleItems[idx].unitPrice;
-                                  } else {
-                                    final newItem = SaleItem(id: const Uuid().v4());
-                                    newItem.productId = product.id;
-                                    newItem.quantity = 1;
-                                    newItem.unitPrice = product.price;
-                                    newItem.totalPrice = product.price;
-                                    saleItems.add(newItem);
-                                  }
-                                }) : null,
-                              ),
-                            ],
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.slate50,
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
                           ),
-                        );
-                      },
+                          child: TextField(
+                            decoration: InputDecoration(
+                              hintText: tr(ref, 'search_products'),
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                              border: InputBorder.none,
+                            ),
+                            onChanged: (value) => setState(() => searchQuery = value.toLowerCase()),
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        Expanded(
+                          child: ListView.separated(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            itemCount: products.where((p) => p.stockQuantity > 0 && p.name.toLowerCase().contains(searchQuery)).length,
+                            separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.slate100),
+                            itemBuilder: (context, index) {
+                              final productFiltered = products.where((p) => p.stockQuantity > 0 && p.name.toLowerCase().contains(searchQuery)).toList();
+                              final product = productFiltered[index];
+                              final existingIndex = saleItems.indexWhere((i) => i.productId == product.id);
+                              final quantity = existingIndex != -1 ? saleItems[existingIndex].quantity : 0;
+                              
+                              return ListTile(
+                                dense: true,
+                                visualDensity: VisualDensity.compact,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                                title: Text(product.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                                subtitle: Text('${CurrencyUtils.format(product.price)} • ${tr(ref, 'stock')}: ${product.stockQuantity}', style: const TextStyle(fontSize: 11)),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (quantity > 0) ...[
+                                      IconButton(
+                                        icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 22),
+                                        onPressed: () => setState(() {
+                                          final idx = saleItems.indexWhere((i) => i.productId == product.id);
+                                          if (saleItems[idx].quantity > 1) {
+                                            saleItems[idx].quantity--;
+                                            saleItems[idx].totalPrice = saleItems[idx].quantity * saleItems[idx].unitPrice;
+                                          } else {
+                                            saleItems.removeAt(idx);
+                                          }
+                                        }),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text('$quantity', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                      ),
+                                    ],
+                                    IconButton(
+                                      icon: Icon(quantity > 0 ? Icons.add_circle : Icons.add_circle_outline, 
+                                        color: quantity > 0 ? Colors.green : AppTheme.primaryBlue, 
+                                        size: 22
+                                      ),
+                                      onPressed: product.stockQuantity > quantity ? () => setState(() {
+                                        final idx = saleItems.indexWhere((i) => i.productId == product.id);
+                                        if (idx != -1) {
+                                          saleItems[idx].quantity++;
+                                          saleItems[idx].totalPrice = saleItems[idx].quantity * saleItems[idx].unitPrice;
+                                        } else {
+                                          final newItem = SaleItem(id: const Uuid().v4());
+                                          newItem.productId = product.id;
+                                          newItem.quantity = 1;
+                                          newItem.unitPrice = product.price;
+                                          newItem.totalPrice = product.price;
+                                          saleItems.add(newItem);
+                                        }
+                                      }) : null,
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        if (saleItems.isNotEmpty) ...[
+                          const Divider(height: 1),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            color: AppTheme.primaryBlue.withValues(alpha: 0.05),
+                            child: Row(
+                              children: [
+                                Text('${tr(ref, 'items_in_cart')}: ${saleItems.length}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                const Spacer(),
+                                TextButton(
+                                  onPressed: () => setState(() => saleItems.clear()),
+                                  child: Text(tr(ref, 'clear_all'), style: const TextStyle(color: Colors.red, fontSize: 11)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -507,52 +565,72 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
               child: Text(tr(ref, 'cancel')),
             ),
             ElevatedButton(
-              onPressed: saleItems.isEmpty ? null : () async {
-                setState(() => _validationError = null);
+              onPressed: (saleItems.isEmpty || isSaving) ? null : () async {
+                setState(() {
+                  _validationError = null;
+                  isSaving = true;
+                });
                 
-                if (selectedCustomer == null) {
-                  setState(() => _validationError = 'Please select a customer for this sale');
-                  return;
-                }
+                try {
+                  if (selectedCustomer == null) {
+                    setState(() {
+                      _validationError = tr(ref, 'error_select_customer');
+                      isSaving = false;
+                    });
+                    return;
+                  }
 
-                final subtotal = saleItems.fold(0.0, (sum, i) => sum + i.totalPrice);
-                final discountAmount = subtotal * (discountPercent / 100);
-                final finalTotal = subtotal - discountAmount;
-                final sale = Sale()
-                  ..customerId = selectedCustomer!.id
-                  ..totalAmount = finalTotal
-                  ..notes = notesController.text
-                  ..isDelivery = isDelivery
-                  ..deliveryAddress = deliveryAddressController.text
-                  ..metadataJson = jsonEncode({
-                    'subtotal': subtotal,
-                    'discountPercent': discountPercent,
-                    'discountAmount': discountAmount,
-                  })
-                  ..lifecycleStatus = isDelivery
-                      ? SaleLifecycleStatus.pending
-                      : SaleLifecycleStatus.completed
-                  ..isPaid = !isDelivery;
+                  final subtotal = saleItems.fold(0.0, (sum, i) => sum + i.totalPrice);
+                  final discountAmount = subtotal * (discountPercent / 100);
+                  final finalTotal = subtotal - discountAmount;
+                  final sale = Sale()
+                    ..customerId = selectedCustomer!.id
+                    ..totalAmount = finalTotal
+                    ..notes = notesController.text
+                    ..isDelivery = isDelivery
+                    ..deliveryAddress = deliveryAddressController.text
+                    ..metadataJson = jsonEncode({
+                      'subtotal': subtotal,
+                      'discountPercent': discountPercent,
+                      'discountAmount': discountAmount,
+                    })
+                    ..lifecycleStatus = isDelivery
+                        ? SaleLifecycleStatus.pending
+                        : SaleLifecycleStatus.completed
+                    ..isPaid = !isDelivery;
 
-                await ref.read(saleProvider.notifier).addSale(sale, saleItems);
-                
-                for (var item in saleItems) {
-                   final p = await ref.read(productProvider.notifier).getProductById(item.productId);
-                   if (p != null) {
-                     p.stockQuantity -= item.quantity;
-                     await ref.read(productProvider.notifier).updateProduct(p);
-                   }
+                  await ref.read(saleProvider.notifier).addSale(sale, saleItems);
+                  
+                  for (var item in saleItems) {
+                    final p = await ref.read(productProvider.notifier).getProductById(item.productId);
+                    if (p != null) {
+                      p.stockQuantity -= item.quantity;
+                      await ref.read(productProvider.notifier).updateProduct(p);
+                    }
+                  }
+                  if (context.mounted) Navigator.pop(context);
+                } catch (e) {
+                  setState(() {
+                    _validationError = e.toString();
+                    isSaving = false;
+                  });
                 }
-                if (context.mounted) Navigator.pop(context);
               },
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
-              child: Text(tr(ref, 'confirm_sale')),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryBlue, 
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.6),
+              ),
+              child: isSaving 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Text(tr(ref, 'confirm_sale')),
             ),
           ],
-        ),
-      ),
-    );
-  }
+        );
+      },
+    ),
+  );
+}
 
   Future<void> _addCustomerOnSpot(BuildContext context, WidgetRef ref, Function(Customer) onAdded) async {
     final formKey = GlobalKey<FormState>();

@@ -49,23 +49,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Stack(
         children: [
-          // Background Gradient
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppTheme.slate900,
-                  AppTheme.slate800,
-                  AppTheme.slate900,
-                ],
+          // Minimal Background Decoration
+          if (!isDark)
+            Positioned(
+              top: -100,
+              right: -100,
+              child: Container(
+                width: 300,
+                height: 300,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppTheme.slate100.withValues(alpha: 0.5),
+                ),
               ),
             ),
-          ),
           
           // Theme Toggle
           Positioned(
@@ -77,14 +81,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 final isDarkMode = themeMode == ThemeMode.dark;
                 return Container(
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.2),
+                    color: theme.cardTheme.color,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                    border: Border.all(color: theme.dividerColor.withValues(alpha: 0.1)),
                   ),
                   child: IconButton(
                     icon: Icon(
                       isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                      color: Colors.white,
+                      color: theme.colorScheme.onSurface,
                     ),
                     onPressed: () {
                       ref.read(themeProvider.notifier).setThemeMode(
@@ -105,41 +109,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 children: [
                   // Logo
                   Container(
-                    width: 72,
-                    height: 72,
+                    width: 64,
+                    height: 64,
                     decoration: BoxDecoration(
-                      gradient: AppTheme.logoGradient,
-                      borderRadius: BorderRadius.circular(20),
+                      color: theme.colorScheme.primary,
+                      borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: AppTheme.primaryBlue.withValues(alpha: 0.3),
+                          color: theme.colorScheme.primary.withValues(alpha: 0.2),
                           blurRadius: 20,
                           offset: const Offset(0, 10),
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.trending_up_rounded,
-                      color: Colors.white,
-                      size: 40,
+                    child: Icon(
+                      Icons.auto_graph_rounded,
+                      color: theme.colorScheme.onPrimary,
+                      size: 32,
                     ),
                   ),
                   const SizedBox(height: 24),
-                  const Text(
-                    'ShopTrack',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
-                    ),
+                  Text(
+                    'Corporate Ladies',
+                    style: theme.textTheme.headlineLarge,
                   ),
-                  const Text(
-                    'Business Management Suite',
-                    style: TextStyle(
-                      color: AppTheme.slate400,
-                      fontSize: 16,
-                    ),
+                  Text(
+                    'Business management made simple.',
+                    style: theme.textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 48),
                   
@@ -148,12 +144,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     constraints: const BoxConstraints(maxWidth: 400),
                     padding: const EdgeInsets.all(32),
                     decoration: BoxDecoration(
-                      color: AppTheme.darkCard,
+                      color: theme.cardTheme.color,
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppTheme.darkBorder),
+                      border: Border.all(color: theme.dividerColor.withValues(alpha: 0.1)),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.2),
+                          color: Colors.black.withValues(alpha: 0.03),
                           blurRadius: 40,
                           offset: const Offset(0, 20),
                         ),
@@ -162,22 +158,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text(
-                          'Welcome Back',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        Text(
+                          'Sign In',
+                          style: theme.textTheme.headlineMedium,
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Enter your credentials to access your account',
-                          style: TextStyle(
-                            color: AppTheme.slate400,
-                            fontSize: 14,
-                          ),
+                        Text(
+                          'Enter your credentials to continue',
+                          style: theme.textTheme.bodyMedium,
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 32),
@@ -187,13 +176,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             padding: const EdgeInsets.all(12),
                             margin: const EdgeInsets.only(bottom: 20),
                             decoration: BoxDecoration(
-                              color: Colors.red.withValues(alpha: 0.1),
+                              color: AppTheme.destructive.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                              border: Border.all(color: AppTheme.destructive.withValues(alpha: 0.2)),
                             ),
                             child: Text(
                               _errorMessage!,
-                              style: const TextStyle(color: Colors.red, fontSize: 13),
+                              style: const TextStyle(color: AppTheme.destructive, fontSize: 13),
                               textAlign: TextAlign.center,
                             ),
                           ),
@@ -202,7 +191,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           controller: _emailController,
                           decoration: const InputDecoration(
                             labelText: 'Email Address',
-                            prefixIcon: Icon(Icons.email_outlined),
+                            prefixIcon: Icon(Icons.email_outlined, size: 20),
                           ),
                           keyboardType: TextInputType.emailAddress,
                         ),
@@ -211,7 +200,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           controller: _passwordController,
                           decoration: const InputDecoration(
                             labelText: 'Password',
-                            prefixIcon: Icon(Icons.lock_outline_rounded),
+                            prefixIcon: Icon(Icons.lock_outline_rounded, size: 20),
                           ),
                           obscureText: true,
                         ),
@@ -220,71 +209,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           alignment: Alignment.centerRight,
                           child: TextButton(
                             onPressed: () {},
-                            child: Text(tr(ref, 'forgot_password')),
+                            child: Text(
+                              tr(ref, 'forgot_password'),
+                              style: TextStyle(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 24),
                         
                         ElevatedButton(
                           onPressed: _isLoading ? null : _handleLogin,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.primaryBlue,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 0,
-                          ),
                           child: _isLoading
-                              ? const SizedBox(
+                              ? SizedBox(
                                   height: 20,
                                   width: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Colors.white,
+                                    color: theme.colorScheme.onPrimary,
                                   ),
                                 )
-                              : const Text(
-                                  'Sign In',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                              : const Text('Sign In'),
                         ),
-                        const SizedBox(height: 24),
-                        if (kDebugMode)
-                          OutlinedButton(
-                            onPressed: _isLoading ? null : () async {
-                              setState(() => _isLoading = true);
-                              try {
-                                await ref.read(authServiceProvider).signInAsDummy();
-                                ref.read(guestModeProvider.notifier).state = true;
-                              } catch (e) {
-                                setState(() => _errorMessage = 'Bypass failed: $e');
-                              } finally {
-                                if (mounted) setState(() => _isLoading = false);
-                              }
-                            },
-                            style: OutlinedButton.styleFrom(
-                              side: BorderSide(color: AppTheme.slate600),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: _isLoading 
-                                ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                : Text(tr(ref, 'development_bypass')),
-                          ),
                         const SizedBox(height: 24),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Text(
+                            Text(
                               "Don't have an account?",
-                              style: TextStyle(color: AppTheme.slate400),
+                              style: theme.textTheme.bodyMedium,
                             ),
                             TextButton(
                               onPressed: () {
@@ -293,7 +249,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   MaterialPageRoute(builder: (_) => const RegisterScreen()),
                                 );
                               },
-                              child: Text(tr(ref, 'register')),
+                              child: Text(
+                                tr(ref, 'register'),
+                                style: TextStyle(
+                                  color: theme.colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ],
                         ),

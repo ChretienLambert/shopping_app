@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/product.dart';
 import '../services/hive_service.dart';
 import '../services/logging_service.dart';
+import '../services/storage_service.dart';
 
 class ProductRepository {
   final _hive = HiveService.instance;
@@ -21,7 +22,11 @@ class ProductRepository {
     product.updatedAt = DateTime.now();
     
     await box.put(product.id, product.toJson());
-    await syncOne(product);
+
+    // Auto-sync disabled as per request
+    // if (_supabase.auth.currentUser != null) {
+    //   await syncOne(product);
+    // }
   }
 
   Future<void> syncOne(Product product) async {
@@ -34,23 +39,38 @@ class ProductRepository {
         return;
       }
 
+      // Handle image uploads
+      String? remotePath = product.imagePath;
+      if (product.imagePath != null && !product.imagePath!.startsWith('http')) {
+        remotePath = await storageService.uploadToSupabase(product.imagePath!, 'products');
+        if (remotePath != null) {
+          product.imagePath = remotePath;
+        }
+      }
+
       final data = {
-        'server_id': product.serverId,
+        'id': product.id,
+        'server_id': product.serverId ?? product.id,
         'user_id': currentUser.id,
         'name': product.name,
         'description': product.description,
         'price': product.price,
         'purchase_price': product.purchasePrice,
         'stock_quantity': product.stockQuantity,
-        'image_path': product.imagePath,
+        'image_path': remotePath,
         'product_type': product.productType,
         'quality': product.quality,
         'deleted_at': product.deletedAt?.toIso8601String(),
         'updated_at': product.updatedAt.toIso8601String(),
       };
 
-      await _supabase.from('products').upsert(data, onConflict: 'server_id');
+      final response = await _supabase
+          .from('products')
+          .upsert(data, onConflict: 'server_id')
+          .select()
+          .single();
 
+      product.serverId = response['server_id'];
       product.isDirty = false;
       product.lastSyncedAt = DateTime.now();
       
@@ -72,14 +92,19 @@ class ProductRepository {
     product.isDirty = true;
     
     await box.put(product.id, product.toJson());
-    await syncOne(product);
+
+    // Auto-sync disabled as per request
+    // if (_supabase.auth.currentUser != null) {
+    //   await syncOne(product);
+    // }
   }
 
   Future<void> syncDirty() async {
     final box = _hive.productsBox;
     final dirtyRecords = box.values
+        .whereType<Map>()
         .map((p) => Product.fromJson(p))
-        .where((p) => p.isDirty)
+        .where((p) => p.isDirty && p.id.isNotEmpty)
         .toList();
     
     if (dirtyRecords.isEmpty) return;
@@ -90,15 +115,21 @@ class ProductRepository {
     }
   }
 
-  Future<void> pullAll() async {
+  Future<void> pullAll({DateTime? lastSync}) async {
     try {
       final box = _hive.productsBox;
-      final response = await _supabase.from('products').select();
+      var query = _supabase.from('products').select();
       
+      if (lastSync != null) {
+        query = query.gt('updated_at', lastSync.toIso8601String());
+      }
+      
+      final response = await query;
       final List<dynamic> remoteData = response;
       
       for (var data in remoteData) {
-        final String sId = data['server_id'];
+        final String? sId = data['server_id'];
+        if (sId == null) continue;
         
         // Find existing local product by serverId
         final existing = box.values

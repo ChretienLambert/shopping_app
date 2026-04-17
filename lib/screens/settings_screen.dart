@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
@@ -65,61 +65,61 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
           padding: const EdgeInsets.all(24.0),
           children: [
             // Profile Section
-            _buildSectionHeader('Profile'),
+            _buildSectionHeader(tr(ref, 'profile')),
             _buildProfileCard(user),
             const SizedBox(height: 32),
 
             // Data Management Section
-            _buildSectionHeader('Cloud Sync & Data'),
+            _buildSectionHeader(tr(ref, 'cloud_sync_data')),
             _buildSettingTile(
               icon: Icons.cloud_sync_rounded,
-              title: 'Push local to Online',
-              subtitle: 'Manually sync local changes to cloud',
+              title: tr(ref, 'manual_data_sync'),
+              subtitle: tr(ref, 'manual_sync_subtitle'),
               onTap: () => _handleManualSync(context, ref),
               trailing: const Icon(Icons.sync, size: 20),
             ),
             _buildSettingTile(
               icon: Icons.network_check_rounded,
-              title: 'Check DB Connection',
-              subtitle: 'Speak to Supabase and verify schema',
+              title: tr(ref, 'check_db_connection'),
+              subtitle: tr(ref, 'check_db_subtitle'),
               onTap: () => _testDatabaseConnection(context, ref),
             ),
             const SizedBox(height: 32),
 
-            _buildSectionHeader('Exports'),
+            _buildSectionHeader(tr(ref, 'exports')),
             _buildSettingTile(
               icon: Icons.dataset_rounded,
-              title: 'Export All Data',
-              subtitle: 'Download everything in JSON format',
+              title: tr(ref, 'export_all_data'),
+              subtitle: tr(ref, 'export_all_subtitle'),
               onTap: () => _exportAllData(context, ref),
             ),
             _buildSettingTile(
               icon: Icons.table_view_rounded,
-              title: 'Inventory Export (CSV)',
-              subtitle: 'Perfect for Excel or Google Sheets',
+              title: tr(ref, 'inventory_export_csv'),
+              subtitle: tr(ref, 'inventory_export_subtitle'),
               onTap: () => _exportProductsCsv(context, ref),
             ),
             const SizedBox(height: 32),
 
-            _buildSectionHeader('Diagnostics & Support'),
+            _buildSectionHeader(tr(ref, 'diagnostics_support')),
             _buildSettingTile(
               icon: Icons.bug_report_rounded,
-              title: 'Share Error Logs',
-              subtitle: 'Send technical logs to support for help',
+              title: tr(ref, 'share_error_logs'),
+              subtitle: tr(ref, 'share_logs_subtitle'),
               onTap: () => _shareLogFile(context),
               trailing: const Icon(Icons.share_rounded, size: 20),
             ),
             _buildSettingTile(
               icon: Icons.delete_forever_rounded,
-              title: 'Wipe All Data (Start New)',
-              subtitle: 'Deletes local and cloud data for this account',
+              title: tr(ref, 'wipe_all_data'),
+              subtitle: tr(ref, 'wipe_data_subtitle'),
               onTap: () => _confirmSystemReset(context, ref),
               destructive: true,
             ),
             const SizedBox(height: 32),
 
             // App Settings Section
-            _buildSectionHeader('App Settings'),
+            _buildSectionHeader(tr(ref, 'app_settings')),
             _buildLanguageTile(),
             _buildThemeTile(isDarkMode),
             const SizedBox(height: 32),
@@ -127,8 +127,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
             // Logout
             _buildSettingTile(
               icon: Icons.logout_rounded,
-              title: 'Sign Out',
-              subtitle: 'Log out of your account securely',
+              title: tr(ref, 'sign_out'),
+              subtitle: tr(ref, 'sign_out_subtitle'),
               onTap: () => ref.read(authServiceProvider).signOut(),
               destructive: true,
             ),
@@ -192,16 +192,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  user?.email?.split('@').first ?? 'Manager',
+                  user?.email?.split('@').first ?? tr(ref, 'manager'),
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   user?.email ?? 'shop@manager.com',
                   style: TextStyle(color: AppTheme.slate500, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
           OutlinedButton(
             onPressed: () {},
             style: OutlinedButton.styleFrom(
@@ -275,7 +278,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
           ),
         ),
         title: Text(tr(ref, 'dark_mode'), style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-        subtitle: Text(isDarkMode ? 'Modern slate theme' : 'Clean indigo theme', style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
+        subtitle: Text(isDarkMode ? tr(ref, 'dark_mode_subtitle') : tr(ref, 'light_mode_subtitle'), style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
         value: isDarkMode,
         activeThumbColor: AppTheme.primaryBlue,
         onChanged: (value) {
@@ -304,10 +307,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
           ),
           child: Icon(Icons.language, color: AppTheme.primaryBlue, size: 22),
         ),
-        title: Text(tr(ref, 'language'), style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+        title: Text(tr(ref, 'language'), 
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+          overflow: TextOverflow.ellipsis,
+        ),
         trailing: DropdownButton<String>(
           value: lang,
-          underline: SizedBox.shrink(),
+          underline: const SizedBox.shrink(),
+          isDense: true,
           items: [
             DropdownMenuItem(value: 'en', child: Text(tr(ref, 'english'))),
             DropdownMenuItem(value: 'fr', child: Text(tr(ref, 'french'))),
@@ -331,21 +338,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
 
     final data = {
       'exportDate': DateTime.now().toIso8601String(),
-      'products': products.map((p) => p.serverId).toList(), // Simplified for brevity in this example
-      'customers': customers.map((c) => c.serverId).toList(),
-      'sales': sales.map((s) => s.serverId).toList(),
-      'expenses': expenses.map((e) => e.serverId).toList(),
+      'products': products.map((p) => p.toJson()).toList(),
+      'customers': customers.map((c) => c.toJson()).toList(),
+      'sales': sales.map((s) => s.toJson()).toList(),
+      'expenses': expenses.map((e) => e.toJson()).toList(),
     };
 
     try {
-      final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/shop_backup_${DateTime.now().millisecondsSinceEpoch}.json');
+      final String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      if (selectedDirectory == null) return;
+
+      final file = File('$selectedDirectory/shop_backup_${DateTime.now().millisecondsSinceEpoch}.json');
       await file.writeAsString(jsonEncode(data));
       
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        subject: 'ShopTrack Backup',
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Data exported to: ${file.path}')),
+        );
+      }
     } catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr(ref, 'error')}: $e')));
     }
@@ -353,9 +363,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
 
   Future<void> _exportProductsCsv(BuildContext context, WidgetRef ref) async {
     final products = ref.read(productProvider);
-    List<List<dynamic>> rows = [["ID", "Name", "Price", "Stock"]];
+    List<List<dynamic>> rows = [
+      ["ID", "Name", "Description", "Price", "Purchase Price", "Stock", "Category", "Quality", "Created At"]
+    ];
     for (var p in products) {
-      rows.add([p.serverId, p.name, p.price, p.stockQuantity]);
+      rows.add([
+        p.id,
+        p.name,
+        p.description,
+        p.price,
+        p.purchasePrice,
+        p.stockQuantity,
+        p.productType ?? '',
+        p.quality ?? '',
+        p.createdAt.toIso8601String()
+      ]);
     }
     String csvData = rows.map((row) {
       return row.map((e) {
@@ -367,14 +389,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
         return escaped;
       }).join(',');
     }).join('\n');
+    
     try {
-      final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/inventory_${DateTime.now().millisecondsSinceEpoch}.csv');
+      final String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      if (selectedDirectory == null) return;
+
+      final file = File('$selectedDirectory/inventory_${DateTime.now().millisecondsSinceEpoch}.csv');
       await file.writeAsString(csvData);
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        subject: 'Inventory CSV',
-      );
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('CSV exported to: ${file.path}')),
+        );
+      }
     } catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr(ref, 'error')}: $e')));
     }
@@ -404,7 +431,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
       Navigator.pop(context); // Close loading
       
       if (error == null) {
-        _showSuccessDialog(context, 'Successfully connected to database and verified schema.');
+        _showSuccessDialog(context, tr(ref, 'db_connect_success'));
       } else {
         _showErrorDialog(context, error);
       }
@@ -422,7 +449,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
             Text(tr(ref, 'success')),
           ],
         ),
-        content: Text(message),
+        content: Text(tr(ref, 'db_connect_success')),
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(tr(ref, 'great')))],
       ),
     );
@@ -472,9 +499,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
             Text(error, style: const TextStyle(fontSize: 12, color: Colors.red)),
             if (isSchemaError) ...[
               const SizedBox(height: 16),
-              const Text(
-                'TIP: This usually means you need to run the SQL schema in your Supabase SQL Editor.',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              Text(
+                tr(ref, 'db_schema_tip'),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
             ],
           ],
@@ -489,9 +516,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
       context: context,
       builder: (context) => AlertDialog(
         title: Text(tr(ref, 'confirm_full_reset')),
-        content: const Text(
-          'This will erase all your local and cloud data for this account. This action cannot be undone.',
-        ),
+        content: Text(tr(ref, 'confirm_reset_desc')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr(ref, 'cancel'))),
           TextButton(
