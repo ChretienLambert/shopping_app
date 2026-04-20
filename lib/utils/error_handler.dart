@@ -22,68 +22,48 @@ class AppException implements Exception {
 
 class NetworkException extends AppException {
   NetworkException({
-    String message = 'Network error occurred',
-    dynamic originalError,
-    StackTrace? stackTrace,
+    super.message = 'Network error occurred',
+    super.originalError,
+    super.stackTrace,
   }) : super(
-          message: message,
           code: 'NETWORK_ERROR',
-          originalError: originalError,
-          stackTrace: stackTrace,
         );
 }
 
 class ValidationException extends AppException {
   ValidationException({
-    required String message,
-    dynamic originalError,
+    required super.message,
+    super.originalError,
   }) : super(
-          message: message,
           code: 'VALIDATION_ERROR',
-          originalError: originalError,
         );
 }
 
 class AuthException extends AppException {
   AuthException({
-    required String message,
-    String? code,
-    dynamic originalError,
-    StackTrace? stackTrace,
-  }) : super(
-          message: message,
-          code: code ?? 'AUTH_ERROR',
-          originalError: originalError,
-          stackTrace: stackTrace,
-        );
+    required super.message,
+    super.code = 'AUTH_ERROR',
+    super.originalError,
+    super.stackTrace,
+  });
 }
 
 class SyncException extends AppException {
   SyncException({
-    required String message,
-    String? code,
-    dynamic originalError,
-    StackTrace? stackTrace,
-  }) : super(
-          message: message,
-          code: code ?? 'SYNC_ERROR',
-          originalError: originalError,
-          stackTrace: stackTrace,
-        );
+    required super.message,
+    super.code = 'SYNC_ERROR',
+    super.originalError,
+    super.stackTrace,
+  });
 }
 
 class DataException extends AppException {
   DataException({
-    required String message,
-    String? code,
-    dynamic originalError,
-    StackTrace? stackTrace,
-  }) : super(
-          message: message,
-          code: code ?? 'DATA_ERROR',
-          originalError: originalError,
-          stackTrace: stackTrace,
-        );
+    required super.message,
+    super.code = 'DATA_ERROR',
+    super.originalError,
+    super.stackTrace,
+  });
 }
 
 /// Error handler utility for consistent error handling across the app
@@ -173,7 +153,7 @@ class ErrorHandler {
   }) async {
     // Log the error
     final errorContext = context != null ? '[$context]' : '';
-    logger.error('${errorContext} Error occurred', error, stackTrace);
+    logger.error('$errorContext Error occurred', error, stackTrace);
 
     // Show user feedback if needed
     if (showToUser && buildContext != null) {

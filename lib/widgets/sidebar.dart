@@ -200,7 +200,7 @@ class Sidebar extends ConsumerWidget {
                   backgroundColor: AppTheme.primaryBlue,
                   radius: 18,
                   child: Text(
-                    user?.email?.substring(0, 1).toUpperCase() ?? 'U',
+                    user?.email.substring(0, 1).toUpperCase() ?? 'U',
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -212,7 +212,7 @@ class Sidebar extends ConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          user?.email?.split('@')[0] ?? 'User',
+                          user?.email.split('@')[0] ?? 'User',
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,

@@ -97,18 +97,16 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authStateProvider);
-    final isGuest = ref.watch(guestModeProvider);
-    
-    return authState.when(
-      data: (state) {
-        if (state.session == null && !isGuest) {
+    final appSession = ref.watch(appSessionProvider);
+
+    return appSession.when(
+      data: (session) {
+        if (session == null) {
           return const LoginScreen();
         }
-        
-        if (_needsInitialSync) {
-          final syncManager = ref.watch(syncManagerProvider);
-          return _buildSyncOverlay(context, syncManager);
+
+        if (_needsInitialSync && session.isOnline) {
+          return _buildSyncOverlay(context, ref.watch(syncManagerProvider));
         }
 
         return _buildMainLayout(context);

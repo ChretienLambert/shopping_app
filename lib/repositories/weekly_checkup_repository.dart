@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/weekly_checkup.dart';
 import '../services/hive_service.dart';
 import '../services/logging_service.dart';
+import '../services/sync_record_resolver.dart';
 
 class WeeklyCheckupRepository {
   final _hive = HiveService.instance;
@@ -90,38 +91,56 @@ class WeeklyCheckupRepository {
       
       for (var data in response) {
         final String sId = data['server_id'];
-        final existing = box.values
-            .map((e) => WeeklyCheckup.fromJson(e as Map))
-            .firstWhere((e) => e.serverId == sId, orElse: () => WeeklyCheckup());
 
-        existing.serverId = sId;
-        existing.weekStartDate = DateTime.parse(data['week_start_date']);
-        existing.weekEndDate = DateTime.parse(data['week_end_date']);
-        existing.checkupDate = DateTime.parse(data['checkup_date']);
-        existing.totalStockPurchased = (data['total_stock_purchased'] as num).toDouble();
-        existing.totalSalesRevenue = (data['total_sales_revenue'] as num).toDouble();
-        existing.totalBusinessExpenses = (data['total_business_expenses'] as num).toDouble();
-        existing.totalPersonalPayouts = (data['total_personal_payouts'] as num).toDouble();
-        existing.capitalRecovered = (data['capital_recovered'] as num).toDouble();
-        existing.capitalRemaining = (data['capital_remaining'] as num).toDouble();
-        existing.realizedProfit = (data['realized_profit'] as num).toDouble();
-        existing.profitPayoutTaken = (data['profit_payout_taken'] as num).toDouble();
-        existing.profitReinjected = (data['profit_reinjected'] as num).toDouble();
-        existing.notes = data['notes'];
-        existing.createdAt = DateTime.parse(data['created_at']);
-        existing.updatedAt = DateTime.parse(data['updated_at']);
-        existing.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
-        existing.operationId = data['operation_id'];
-        existing.salesCount = data['sales_count'] ?? 0;
-        existing.stockItemsCount = data['stock_items_count'] ?? 0;
-        existing.categoryRevenue = (data['category_revenue'] as Map?)?.cast<String, double>();
-        existing.topProducts = (data['top_products'] as List?)
+        final existingJson = SyncRecordResolver.findExistingRecord(
+          box.values,
+          localId: sId,
+          serverId: sId,
+        );
+
+        if (existingJson != null) {
+          final existing = WeeklyCheckup.fromJson(existingJson);
+          if (existing.isDirty) {
+            logger.info('Skipping pull for dirty weekly checkup: ${existing.operationId}');
+            continue;
+          }
+          final remoteUpdatedAt = DateTime.parse(data['updated_at']);
+          if (!remoteUpdatedAt.isAfter(existing.updatedAt)) {
+            continue;
+          }
+        }
+
+        final checkup = existingJson != null
+            ? WeeklyCheckup.fromJson(existingJson)
+            : WeeklyCheckup(id: SyncRecordResolver.stableLocalId(existingJson: existingJson, remoteServerId: sId));
+        checkup.serverId = sId;
+        checkup.weekStartDate = DateTime.parse(data['week_start_date']);
+        checkup.weekEndDate = DateTime.parse(data['week_end_date']);
+        checkup.checkupDate = DateTime.parse(data['checkup_date']);
+        checkup.totalStockPurchased = (data['total_stock_purchased'] as num).toDouble();
+        checkup.totalSalesRevenue = (data['total_sales_revenue'] as num).toDouble();
+        checkup.totalBusinessExpenses = (data['total_business_expenses'] as num).toDouble();
+        checkup.totalPersonalPayouts = (data['total_personal_payouts'] as num).toDouble();
+        checkup.capitalRecovered = (data['capital_recovered'] as num).toDouble();
+        checkup.capitalRemaining = (data['capital_remaining'] as num).toDouble();
+        checkup.realizedProfit = (data['realized_profit'] as num).toDouble();
+        checkup.profitPayoutTaken = (data['profit_payout_taken'] as num).toDouble();
+        checkup.profitReinjected = (data['profit_reinjected'] as num).toDouble();
+        checkup.notes = data['notes'];
+        checkup.createdAt = DateTime.parse(data['created_at']);
+        checkup.updatedAt = DateTime.parse(data['updated_at']);
+        checkup.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
+        checkup.operationId = data['operation_id'];
+        checkup.salesCount = data['sales_count'] ?? 0;
+        checkup.stockItemsCount = data['stock_items_count'] ?? 0;
+        checkup.categoryRevenue = (data['category_revenue'] as Map?)?.cast<String, double>();
+        checkup.topProducts = (data['top_products'] as List?)
             ?.map((e) => (e as Map).cast<String, dynamic>())
             .toList();
-        existing.isDirty = false;
-        existing.lastSyncedAt = DateTime.now();
+        checkup.isDirty = false;
+        checkup.lastSyncedAt = DateTime.now();
 
-        await box.put(existing.id, existing.toJson());
+        await box.put(checkup.id, checkup.toJson());
       }
       logger.info('Pulled all weekly checkups');
     } catch (e, stack) {

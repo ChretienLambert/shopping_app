@@ -6,6 +6,7 @@ import '../providers/expense_provider.dart';
 import '../providers/product_provider.dart';
 import '../providers/sale_provider.dart';
 import '../providers/financial_stats_provider.dart';
+import '../services/financial_stats_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_localization.dart';
 import '../utils/currency_utils.dart';
@@ -20,6 +21,7 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   WeeklyCheckup? _lastWeek;
   final _checkupRepo = WeeklyCheckupRepository();
+  bool _showWeekly = true;
 
   @override
   void initState() {
@@ -68,12 +70,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                   ],
                 ),
-                // Add Capital button removed from dashboard as requested
+                _buildToggle(),
               ],
             ),
             const SizedBox(height: 32),
             
-            // Financial Resume Section (Moved from Finance Screen)
+            // Financial Resume Section
             _buildFinancialResumeSection(stats),
             const SizedBox(height: 32),
 
@@ -88,26 +90,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               children: [
                 _buildModernKPI(
                   tr(ref, 'total_revenue'), 
-                  CurrencyUtils.format(stats.revenue), 
+                  CurrencyUtils.format(_showWeekly ? stats.revenue : stats.totalRevenue), 
                   Icons.arrow_upward_rounded,
                   isDarkMode ? AppTheme.chart5 : Colors.green,
                 ),
                 _buildModernKPI(
                   tr(ref, 'sales_count'), 
-                  '${stats.salesCount} ${tr(ref, 'sales')}', 
+                  '${_showWeekly ? stats.salesCount : stats.totalSalesCount} ${tr(ref, 'sales')}', 
                   Icons.shopping_cart_outlined,
                   isDarkMode ? AppTheme.chart4 : Colors.orange,
                   subtitle: stats.pendingDeliveries > 0 ? '${stats.pendingDeliveries} ${tr(ref, 'pending')}' : null,
                 ),
                 _buildModernKPI(
                   tr(ref, 'stock_deployed'), 
-                  CurrencyUtils.format(stats.stockDeployed), 
+                  CurrencyUtils.format(_showWeekly ? stats.stockDeployed : stats.totalStockDeployed), 
                   Icons.inventory_2_outlined,
                   AppTheme.primary,
                 ),
                 _buildModernKPI(
                   tr(ref, 'available_profit'), 
-                  CurrencyUtils.format(stats.availableProfit), 
+                  CurrencyUtils.format(_showWeekly ? stats.availableProfit : stats.totalAvailableProfit), 
                   Icons.account_balance_wallet_outlined,
                   AppTheme.primaryBlue,
                 ),
@@ -135,16 +137,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                         child: Column(
                           children: [
-                            _buildProgressRow(tr(ref, 'stock_deployed'), stats.stockDeployed, isDarkMode ? AppTheme.slate400 : Colors.grey),
+                            _buildProgressRow(tr(ref, 'stock_deployed'), _showWeekly ? stats.stockDeployed : stats.totalStockDeployed, isDarkMode ? AppTheme.slate400 : Colors.grey),
                             const SizedBox(height: 12),
-                            _buildProgressRow(tr(ref, 'recovered'), stats.recoveredFromSales, isDarkMode ? AppTheme.chart5 : Colors.green),
+                            _buildProgressRow(tr(ref, 'recovered'), _showWeekly ? stats.recoveredFromSales : stats.totalRecoveredFromSales, isDarkMode ? AppTheme.chart5 : Colors.green),
                             const SizedBox(height: 24),
                             Tooltip(
                               message: tr(ref, 'capital_energy_desc'),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(10),
                                 child: LinearProgressIndicator(
-                                  value: stats.coverage,
+                                  value: _showWeekly ? stats.coverage : stats.totalCoverage,
                                   minHeight: 12,
                                   backgroundColor: isDarkMode ? AppTheme.slate800 : AppTheme.secondary,
                                   color: AppTheme.primary,
@@ -155,9 +157,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text('${(stats.coverage * 100).toStringAsFixed(1)}% ${tr(ref, 'recovered')}', 
+                                Text('${((_showWeekly ? stats.coverage : stats.totalCoverage) * 100).toStringAsFixed(1)}% ${tr(ref, 'recovered')}', 
                                   style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
-                                Text('${tr(ref, 'remaining')}: ${CurrencyUtils.format(stats.remainingToRecover)}',
+                                Text('${tr(ref, 'remaining')}: ${CurrencyUtils.format(_showWeekly ? stats.remainingToRecover : stats.totalRemainingToRecover)}',
                                   style: Theme.of(context).textTheme.labelLarge),
                               ],
                             ),
@@ -192,6 +194,45 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  Widget _buildToggle() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildToggleButton(tr(ref, 'this_week'), _showWeekly, () => setState(() => _showWeekly = true)),
+          _buildToggleButton(tr(ref, 'all_time'), !_showWeekly, () => setState(() => _showWeekly = false)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToggleButton(String label, bool isSelected, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primaryBlue : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Theme.of(context).colorScheme.onSurface,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFinancialResumeSection(FinancialStats stats) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -214,11 +255,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ]),
               const Divider(height: 32),
               _buildResumeRow(tr(ref, 'profit_analysis'), [
-                {'label': tr(ref, 'sales_count'), 'value': stats.salesCount, 'isRaw': true},
-                {'label': tr(ref, 'revenue'), 'value': stats.revenue},
-                {'label': tr(ref, 'stock_cost'), 'value': stats.stockDeployed},
-                {'label': tr(ref, 'operational_expenses'), 'value': stats.businessCost},
-                {'label': tr(ref, 'net_profit'), 'value': stats.netProfit},
+                {'label': tr(ref, 'sales_count'), 'value': _showWeekly ? stats.salesCount : stats.totalSalesCount, 'isRaw': true},
+                {'label': tr(ref, 'revenue'), 'value': _showWeekly ? stats.revenue : stats.totalRevenue},
+                {'label': tr(ref, 'stock_cost'), 'value': _showWeekly ? stats.stockDeployed : stats.totalStockDeployed},
+                {'label': tr(ref, 'operational_expenses'), 'value': _showWeekly ? stats.businessCost : stats.totalBusinessCost},
+                {'label': tr(ref, 'net_profit'), 'value': _showWeekly ? stats.netProfit : stats.totalNetProfit},
               ]),
             ],
           ),
@@ -386,7 +427,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _buildRecentActivityList(List<Map<String, dynamic>> activities) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     if (activities.isEmpty) {
       return Container(
         height: 100,

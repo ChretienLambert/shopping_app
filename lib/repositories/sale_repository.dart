@@ -3,12 +3,17 @@ import '../models/sale.dart';
 import '../models/sale_item.dart';
 import '../models/customer.dart';
 import '../models/product.dart';
+import '../repositories/customer_repository.dart';
+import '../repositories/product_repository.dart';
 import '../services/hive_service.dart';
 import '../services/logging_service.dart';
+import '../services/sync_record_resolver.dart';
 
 class SaleRepository {
   final _hive = HiveService.instance;
   final _supabase = Supabase.instance.client;
+  final _customerRepository = CustomerRepository();
+  final _productRepository = ProductRepository();
 
   Future<List<Sale>> getAll() async {
     final box = _hive.salesBox;
@@ -50,6 +55,8 @@ class SaleRepository {
         logger.info('Sync skipped (No authenticated user)');
         return;
       }
+
+      await _ensureDependenciesSynced(sale, items);
       
       // Get server ID for customer
       final customerMap = customersBox.get(sale.customerId);
@@ -87,6 +94,12 @@ class SaleRepository {
         final productMap = productsBox.get(item.productId);
         if (productMap != null) {
           final product = Product.fromJson(productMap);
+          if (product.serverId == null) {
+            logger.warning(
+              'Skipping sale item sync for ${item.id} because product ${product.id} has no serverId after dependency sync.',
+            );
+            continue;
+          }
           final itemData = {
             'id': item.id,
             'server_id': item.serverId ?? item.id,
@@ -174,12 +187,29 @@ class SaleRepository {
       
       for (var data in remoteData) {
         final String sId = data['server_id'];
-        
-        final existing = salesBox.values
-            .map((s) => Sale.fromJson(s))
-            .firstWhere((s) => s.serverId == sId, orElse: () => Sale());
 
-        existing.serverId = sId;
+        final existingJson = SyncRecordResolver.findExistingRecord(
+          salesBox.values,
+          localId: sId,
+          serverId: sId,
+        );
+
+        if (existingJson != null) {
+          final existing = Sale.fromJson(existingJson);
+          if (existing.isDirty) {
+            logger.info('Skipping pull for dirty sale: ${existing.operationId}');
+            continue;
+          }
+          final remoteUpdatedAt = DateTime.parse(data['updated_at']);
+          if (!remoteUpdatedAt.isAfter(existing.updatedAt)) {
+            continue;
+          }
+        }
+
+        final sale = existingJson != null
+            ? Sale.fromJson(existingJson)
+            : Sale(id: SyncRecordResolver.stableLocalId(existingJson: existingJson, remoteServerId: sId));
+        sale.serverId = sId;
         
         // Map customer_id back to local ID
         if (data['customer_id'] != null) {
@@ -187,59 +217,59 @@ class SaleRepository {
           final localCustomer = customersBox.values
               .map((c) => Customer.fromJson(c))
               .firstWhere((c) => c.serverId == cServerId, orElse: () => Customer(id: '0'));
-          existing.customerId = localCustomer.id;
+          sale.customerId = localCustomer.id;
         } else {
-          existing.customerId = '0';
+          sale.customerId = '0';
         }
         
-        existing.totalAmount = (data['total_amount'] as num).toDouble();
-        existing.saleDate = DateTime.parse(data['sale_date']);
-        existing.notes = data['notes'];
-        existing.metadataJson = data['metadata_json'];
-        existing.status = data['status'] ?? 'Complete';
-        existing.isPaid = data['is_paid'] ?? true;
-        existing.isDelivery = data['is_delivery'] ?? false;
-        existing.deliveryAddress = data['delivery_address'];
-        existing.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
-        existing.createdAt = DateTime.parse(data['created_at']);
-        existing.updatedAt = DateTime.parse(data['updated_at']);
-        existing.isDirty = false;
-        existing.lastSyncedAt = DateTime.now();
+        sale.totalAmount = (data['total_amount'] as num).toDouble();
+        sale.saleDate = DateTime.parse(data['sale_date']);
+        sale.notes = data['notes'];
+        sale.metadataJson = data['metadata_json'];
+        sale.status = data['status'] ?? 'Complete';
+        sale.isPaid = data['is_paid'] ?? true;
+        sale.isDelivery = data['is_delivery'] ?? false;
+        sale.deliveryAddress = data['delivery_address'];
+        sale.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
+        sale.createdAt = DateTime.parse(data['created_at']);
+        sale.updatedAt = DateTime.parse(data['updated_at']);
+        sale.isDirty = false;
+        sale.lastSyncedAt = DateTime.now();
         
-        await salesBox.put(existing.id, existing.toJson());
+        await salesBox.put(sale.id, sale.toJson());
         
         // Pull and update items
-      final itemsResponse = await _supabase.from('sale_items').select().eq('sale_id', sId);
-      
-      // Clear local items for this sale first
-      final itemsToRemove = itemsBox.values
-          .map((i) => SaleItem.fromJson(i))
-          .where((i) => i.saleId == existing.id)
-          .map((i) => i.id)
-          .toList();
-      for (var id in itemsToRemove) {
-        await itemsBox.delete(id);
-      }
-      
-      for (var itemData in itemsResponse) {
-         final String? pServerId = itemData['product_id'];
-         if (pServerId == null) continue;
+        final itemsResponse = await _supabase.from('sale_items').select().eq('sale_id', sId);
+        
+        // Clear local items for this sale first
+        final itemsToRemove = itemsBox.values
+            .map((i) => SaleItem.fromJson(i))
+            .where((i) => i.saleId == sale.id)
+            .map((i) => i.id)
+            .toList();
+        for (var id in itemsToRemove) {
+          await itemsBox.delete(id);
+        }
+        
+        for (var itemData in itemsResponse) {
+           final String? pServerId = itemData['product_id'];
+           if (pServerId == null) continue;
 
-         final localProduct = productsBox.values
-             .map((p) => Product.fromJson(p))
-             .firstWhere((p) => p.serverId == pServerId, orElse: () => Product(id: '0'));
-             
-         if (localProduct.id != '0') {
-           final item = SaleItem();
-           item.serverId = itemData['server_id'] ?? item.serverId;
-           item.saleId = existing.id;
-           item.productId = localProduct.id;
-           item.quantity = itemData['quantity'];
-           item.unitPrice = (itemData['unit_price'] as num).toDouble();
-           item.totalPrice = (itemData['total_price'] as num).toDouble();
-           await itemsBox.put(item.id, item.toJson());
-         }
-      }
+           final localProduct = productsBox.values
+               .map((p) => Product.fromJson(p))
+               .firstWhere((p) => p.serverId == pServerId, orElse: () => Product(id: '0'));
+               
+           if (localProduct.id != '0') {
+             final item = SaleItem(id: itemData['server_id'] ?? itemData['id']);
+             item.serverId = itemData['server_id'] ?? item.serverId;
+             item.saleId = sale.id;
+             item.productId = localProduct.id;
+             item.quantity = itemData['quantity'];
+             item.unitPrice = (itemData['unit_price'] as num).toDouble();
+             item.totalPrice = (itemData['total_price'] as num).toDouble();
+             await itemsBox.put(item.id, item.toJson());
+           }
+        }
       }
       logger.info('Pulled all sales and items from cloud');
     } catch (e, stack) {
@@ -253,5 +283,24 @@ class SaleRepository {
         .map((i) => SaleItem.fromJson(i as Map))
         .where((i) => i.saleId == saleId)
         .toList();
+  }
+
+  Future<void> _ensureDependenciesSynced(Sale sale, List<SaleItem> items) async {
+    final customerMap = _hive.customersBox.get(sale.customerId);
+    if (customerMap != null) {
+      final customer = Customer.fromJson(customerMap);
+      if (customer.serverId == null || customer.isDirty) {
+        await _customerRepository.syncOne(customer);
+      }
+    }
+
+    for (final item in items) {
+      final productMap = _hive.productsBox.get(item.productId);
+      if (productMap == null) continue;
+      final product = Product.fromJson(productMap);
+      if (product.serverId == null || product.isDirty) {
+        await _productRepository.syncOne(product);
+      }
+    }
   }
 }

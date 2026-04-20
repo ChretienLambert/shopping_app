@@ -54,6 +54,7 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.4
   build_runner: ^2.4.13
   hive_generator: ^2.0.1
+  msix: ^3.16.13
 
 flutter:
   uses-material-design: true
@@ -69,3 +70,12 @@ flutter_launcher_icons:
   min_sdk_android: 21
   adaptive_icon_background: "#000000"
   adaptive_icon_foreground: "assets/icons/app_icon.png"
+
+msix_config:
+  display_name: Shopping App
+  publisher_display_name: Shopping App
+  identity_name: com.shopping.app
+  publisher: CN=ShoppingApp, O=ShoppingApp, L=ShoppingApp, S=ShoppingApp, C=ShoppingApp
+  logo_path: assets/icons/app_icon.png
+  capabilities: internetClient, location, microphone, webcam
+  install_certificate: false

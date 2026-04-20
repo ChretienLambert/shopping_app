@@ -1,16 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
+import '../models/app_session.dart';
 import '../services/sync_manager.dart';
 import 'auth_provider.dart';
 
 final syncManagerProvider = Provider<SyncManager>((ref) {
-  final syncManager = SyncManager();
+  final syncManager = SyncManager(ref.watch(appConfigProvider));
   
-  // Real-time sync disabled as per request
-  // Listen to auth state to trigger sync on login
-  ref.listen<AsyncValue<supabase.AuthState>>(authStateProvider, (previous, next) {
-    if (next.value?.session != null && previous?.value?.session == null) {
-      // Manual trigger of initial sync when logging in
+  ref.listen<AsyncValue<AppSession?>>(appSessionProvider, (previous, next) {
+    final previousSession = previous?.value;
+    final nextSession = next.value;
+
+    if (nextSession != null &&
+        nextSession.isOnline &&
+        previousSession?.serverUserId != nextSession.serverUserId) {
       syncManager.triggerInitialSync();
     }
   });

@@ -1,17 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
-import '../services/auth_service.dart';
+import 'auth_provider.dart';
 
 final sessionTimeoutProvider = StateProvider<int>((ref) => 7);
 
 final sessionExpiredProvider = StateProvider<bool>((ref) => false);
 
 final sessionCheckProvider = FutureProvider<bool>((ref) async {
-  final authService = AuthService();
+  final authService = ref.watch(authServiceProvider);
   return await authService.signOutIfExpired();
 });
 
 final sessionDaysRemainingProvider = FutureProvider<int>((ref) async {
-  final authService = AuthService();
+  final authService = ref.watch(authServiceProvider);
   return await authService.getDaysUntilTimeout();
 });

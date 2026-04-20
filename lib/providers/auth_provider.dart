@@ -1,8 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
+import '../models/app_session.dart';
+import '../services/app_config.dart';
 import '../services/auth_service.dart';
 
-final authServiceProvider = Provider<AuthService>((ref) => AuthService());
+final appConfigProvider = Provider<AppConfig>((ref) {
+  throw UnimplementedError('appConfigProvider must be overridden in main()');
+});
+
+final authServiceProvider = Provider<AuthService>((ref) {
+  return AuthService(ref.watch(appConfigProvider));
+});
 
 final authStateProvider = StreamProvider<supabase.AuthState>((ref) {
   return ref.watch(authServiceProvider).authStateChanges;
@@ -10,10 +18,14 @@ final authStateProvider = StreamProvider<supabase.AuthState>((ref) {
 
 final guestModeProvider = StateProvider<bool>((ref) => false);
 
-final currentUserProvider = Provider<supabase.User?>((ref) {
-  return ref.watch(authStateProvider).value?.session?.user ?? ref.watch(authServiceProvider).currentUser;
+final appSessionProvider = StreamProvider<AppSession?>((ref) {
+  return ref.watch(authServiceProvider).sessionChanges;
 });
 
-final sessionProvider = Provider<supabase.Session?>((ref) {
-  return ref.watch(authStateProvider).value?.session ?? ref.watch(authServiceProvider).currentSession;
+final currentUserProvider = Provider<AppSession?>((ref) {
+  return ref.watch(appSessionProvider).value ?? ref.watch(authServiceProvider).currentAppSession;
+});
+
+final sessionProvider = Provider<AppSession?>((ref) {
+  return ref.watch(currentUserProvider);
 });

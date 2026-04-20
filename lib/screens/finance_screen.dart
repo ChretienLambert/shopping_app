@@ -7,6 +7,7 @@ import '../providers/expense_provider.dart';
 import '../providers/financial_stats_provider.dart';
 import '../providers/sale_provider.dart';
 import '../providers/weekly_checkup_provider.dart';
+import '../services/financial_stats_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_localization.dart';
 import '../utils/currency_utils.dart';
@@ -24,7 +25,7 @@ class FinanceScreen extends ConsumerWidget {
           child: _buildStatCard(
             context,
             tr(ref, 'available_profit'),
-            CurrencyUtils.format(stats.totalNetProfit),
+            CurrencyUtils.format(stats.totalAvailableProfit),
             Icons.savings_rounded,
             Colors.green,
           ),
@@ -57,35 +58,43 @@ class FinanceScreen extends ConsumerWidget {
                   runSpacing: 12,
                   children: [
                     SizedBox(
-                      width: constraints.maxWidth > 600 ? (constraints.maxWidth - 24) / 3 : constraints.maxWidth,
+                      width: constraints.maxWidth > 600 ? (constraints
+                          .maxWidth - 24) / 3 : constraints.maxWidth,
                       child: OutlinedButton.icon(
-                        onPressed: () => _showQuickResume(
-                          context,
-                          ref,
-                          stats: stats,
-                        ),
+                        onPressed: () =>
+                            _showQuickResume(
+                              context,
+                              ref,
+                              stats: stats,
+                            ),
                         icon: const Icon(Icons.summarize_outlined),
-                        label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr(ref, 'quick_resume'))),
+                        label: FittedBox(fit: BoxFit.scaleDown, child: Text(
+                            tr(ref, 'quick_resume'))),
                       ),
                     ),
                     SizedBox(
-                      width: constraints.maxWidth > 600 ? (constraints.maxWidth - 24) / 3 : constraints.maxWidth,
+                      width: constraints.maxWidth > 600 ? (constraints
+                          .maxWidth - 24) / 3 : constraints.maxWidth,
                       child: OutlinedButton.icon(
                         onPressed: () => _addInjection(context, ref),
                         icon: const Icon(Icons.add_circle_outline_rounded),
-                        label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr(ref, 'inject_capital'))),
+                        label: FittedBox(fit: BoxFit.scaleDown, child: Text(
+                            tr(ref, 'inject_capital'))),
                       ),
                     ),
                     SizedBox(
-                      width: constraints.maxWidth > 600 ? (constraints.maxWidth - 24) / 3 : constraints.maxWidth,
+                      width: constraints.maxWidth > 600 ? (constraints
+                          .maxWidth - 24) / 3 : constraints.maxWidth,
                       child: OutlinedButton.icon(
-                        onPressed: () => _showWeeklyCheckupDialog(
-                          context,
-                          ref,
-                          stats: stats,
-                        ),
+                        onPressed: () =>
+                            _showWeeklyCheckupDialog(
+                              context,
+                              ref,
+                              stats: stats,
+                            ),
                         icon: const Icon(Icons.calendar_today_rounded),
-                        label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr(ref, 'weekly_checkup'))),
+                        label: FittedBox(fit: BoxFit.scaleDown, child: Text(
+                            tr(ref, 'weekly_checkup'))),
                       ),
                     ),
                   ],
@@ -93,7 +102,7 @@ class FinanceScreen extends ConsumerWidget {
               },
             ),
             const SizedBox(height: 24),
-            
+
             // Key Stats Wrap
             Wrap(
               spacing: 12,
@@ -183,161 +192,173 @@ class FinanceScreen extends ConsumerWidget {
   }
 
   Widget _buildMonthlyWeeklyResume(BuildContext context, WidgetRef ref) {
-    final rawSales = ref.watch(saleProvider);
+    final checkups = ref.watch(weeklyCheckupProvider);
+    final allSales = ref.watch(saleProvider);
     final allExpenses = ref.watch(expenseProvider);
-    
-    // Get all sales and expenses
-    final sales = rawSales.where((s) => s.deletedAt == null).toList();
-    final expenses = allExpenses.where((e) => e.deletedAt == null).toList();
-    
-    // Group by month
-    final monthlyData = <String, List<Map<String, dynamic>>>{};
-    
-    for (final sale in sales) {
-      final monthKey = '${sale.saleDate.year}-${sale.saleDate.month.toString().padLeft(2, '0')}';
-      monthlyData.putIfAbsent(monthKey, () => []);
-      monthlyData[monthKey]!.add({
-        'type': 'sale',
-        'date': sale.saleDate,
-        'amount': sale.totalAmount,
-        'isPaid': sale.isPaid,
-      });
+    final statsService = ref.watch(financialStatsServiceProvider);
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    // Grouping by Month
+    final Map<String, List<WeeklyCheckup>> monthlyGroups = {};
+    for (var checkup in checkups) {
+      final monthKey = '${checkup.weekEndDate.year}-${checkup.weekEndDate.month.toString().padLeft(2, '0')}';
+      monthlyGroups.putIfAbsent(monthKey, () => []).add(checkup);
     }
-    
-    for (final expense in expenses) {
-      final monthKey = '${expense.expenseDate.year}-${expense.expenseDate.month.toString().padLeft(2, '0')}';
-      monthlyData.putIfAbsent(monthKey, () => []);
-      monthlyData[monthKey]!.add({
-        'type': 'expense',
-        'date': expense.expenseDate,
-        'amount': expense.amount,
-        'category': expense.category,
-      });
-    }
-    
-    // Sort months in descending order
-    final sortedMonths = monthlyData.keys.toList()..sort((a, b) => b.compareTo(a));
-    
-    if (sortedMonths.isEmpty) {
+
+    final sortedMonths = monthlyGroups.keys.toList()..sort((a, b) => b.compareTo(a));
+
+    if (checkups.isEmpty) {
       return const SizedBox.shrink();
     }
-    
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.4)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(tr(ref, 'monthly_weekly_resume'), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Theme.of(context).colorScheme.onSurface)),
-          const SizedBox(height: 16),
-          ...sortedMonths.take(6).map((monthKey) {
-            final year = int.parse(monthKey.split('-')[0]);
-            final month = int.parse(monthKey.split('-')[1]);
-            final monthName = _getMonthName(month);
-            final weekData = _calculateWeeklyStats(monthlyData[monthKey]!, year, month);
-            
-            return ExpansionTile(
-              title: Text('$monthName $year', style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
-              tilePadding: EdgeInsets.zero,
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          tr(ref, 'monthly_performance'),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        const SizedBox(height: 12),
+        ...sortedMonths.map((monthKey) {
+          final monthCheckups = monthlyGroups[monthKey]!;
+          final dateParts = monthKey.split('-');
+          final year = int.parse(dateParts[0]);
+          final month = int.parse(dateParts[1]);
+          final monthStart = DateTime(year, month, 1);
+          final monthEnd = DateTime(year, month + 1, 0).isBefore(DateTime.now()) 
+              ? DateTime(year, month + 1, 0, 23, 59, 59) 
+              : DateTime.now();
+
+          // Calculate Month Stats from raw data
+          final monthSales = allSales.where((s) => 
+            s.isPaid && 
+            s.saleDate.isAfter(monthStart.subtract(const Duration(seconds: 1))) && 
+            s.saleDate.isBefore(monthEnd.add(const Duration(seconds: 1))) && 
+            s.deletedAt == null
+          ).toList();
+          
+          final monthExpenses = allExpenses.where((e) => 
+            e.expenseDate.isAfter(monthStart.subtract(const Duration(seconds: 1))) && 
+            e.expenseDate.isBefore(monthEnd.add(const Duration(seconds: 1))) && 
+            e.deletedAt == null
+          ).toList();
+
+          final monthSummary = statsService.calculatePeriod(
+            sales: monthSales,
+            expenses: monthExpenses,
+          );
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: ExpansionTile(
+              title: Text(
+                '${_getMonthName(month)} $year',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                '${tr(ref, 'available_profit')}: ${CurrencyUtils.format(monthSummary.availableProfit)}',
+                style: TextStyle(
+                  color: monthSummary.availableProfit >= 0 ? Colors.green : Colors.red,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               children: [
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      ...weekData.entries.map((entry) {
-                        final weekNum = entry.key;
-                        final stats = entry.value;
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: isDarkMode ? AppTheme.slate800 : AppTheme.slate50,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Week $weekNum', style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
-                              const SizedBox(height: 8),
-                              _buildResumeRow(tr(ref, 'revenue'), CurrencyUtils.format(stats['revenue'] ?? 0), isDarkMode: isDarkMode),
-                              _buildResumeRow(tr(ref, 'stock_deployed'), CurrencyUtils.format(stats['stockDeployed'] ?? 0), isDarkMode: isDarkMode),
-                              _buildResumeRow(tr(ref, 'business_expenses'), CurrencyUtils.format(stats['businessExpenses'] ?? 0), isDarkMode: isDarkMode),
-                              _buildResumeRow(tr(ref, 'personal_payout'), CurrencyUtils.format(stats['personalPayout'] ?? 0), isDarkMode: isDarkMode),
-                              _buildResumeRow(tr(ref, 'net_profit'), CurrencyUtils.format(stats['netProfit'] ?? 0), isHighlight: true, isDarkMode: isDarkMode),
-                              _buildResumeRow(tr(ref, 'sales_count'), '${stats['salesCount'] ?? 0}', isDarkMode: isDarkMode),
+                      _buildResumeRow(tr(ref, 'total_revenue'), CurrencyUtils.format(monthSummary.revenue), isDarkMode: isDarkMode),
+                      _buildResumeRow(tr(ref, 'stock_purchased'), CurrencyUtils.format(monthSummary.stockDeployed), isDarkMode: isDarkMode),
+                      _buildResumeRow(tr(ref, 'business_expenses'), CurrencyUtils.format(monthSummary.businessCost), isDarkMode: isDarkMode),
+                      _buildResumeRow(tr(ref, 'personal_payout'), CurrencyUtils.format(monthSummary.payout), isDarkMode: isDarkMode),
+                      _buildResumeRow(tr(ref, 'realized_profit'), CurrencyUtils.format(monthSummary.realizedProfit), isDarkMode: isDarkMode),
+                      _buildResumeRow(tr(ref, 'available_profit'), CurrencyUtils.format(monthSummary.availableProfit), isDarkMode: isDarkMode),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(tr(ref, 'weekly_checkups'), style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text('${monthCheckups.length} ${tr(ref, 'completed')}', style: const TextStyle(fontSize: 12)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ...monthCheckups.map((checkup) => Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDarkMode ? Colors.white10 : Colors.black.withValues(alpha: 0.03),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '${_formatDate(checkup.weekStartDate)} - ${_formatDate(checkup.weekEndDate)}',
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(tr(ref, 'completed'), style: const TextStyle(color: AppTheme.primaryBlue, fontSize: 10, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(child: _buildMiniStat(tr(ref, 'revenue'), CurrencyUtils.format(checkup.totalSalesRevenue))),
+                                Expanded(child: _buildMiniStat(tr(ref, 'net_profit'), CurrencyUtils.format(checkup.realizedProfit), color: checkup.realizedProfit >= 0 ? Colors.green : Colors.red)),
+                                Expanded(child: _buildMiniStat(tr(ref, 'payout'), CurrencyUtils.format(checkup.profitPayoutTaken))),
+                              ],
+                            ),
+                            if (checkup.notes != null && checkup.notes!.isNotEmpty) ...[
+                              const Divider(height: 16),
+                              Text(checkup.notes!, style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
                             ],
-                          ),
-                        );
-                      }),
+                          ],
+                        ),
+                      )),
                     ],
                   ),
                 ),
               ],
-            );
-          }),
-        ],
-      ),
+            ),
+          );
+        }),
+      ],
     );
-  }
-
-  Map<int, Map<String, double>> _calculateWeeklyStats(List<Map<String, dynamic>> monthData, int year, int month) {
-    final weeklyStats = <int, Map<String, double>>{};
-    
-    for (int week = 1; week <= 5; week++) {
-      weeklyStats[week] = {
-        'revenue': 0,
-        'stockDeployed': 0,
-        'businessExpenses': 0,
-        'personalPayout': 0,
-        'netProfit': 0,
-        'salesCount': 0,
-      };
-    }
-    
-    for (final item in monthData) {
-      final date = item['date'] as DateTime;
-      if (date.year != year || date.month != month) continue;
-      
-      final weekNum = _getWeekOfMonth(date);
-      final stats = weeklyStats[weekNum]!;
-      
-      if (item['type'] == 'sale') {
-        if (item['isPaid'] == true) {
-          stats['revenue'] = stats['revenue']! + item['amount'] as double;
-          stats['salesCount'] = stats['salesCount']! + 1;
-        }
-      } else if (item['type'] == 'expense') {
-        final category = item['category'] as ExpenseCategory;
-        if (category == ExpenseCategory.stock) {
-          stats['stockDeployed'] = stats['stockDeployed']! + item['amount'] as double;
-        } else if (category == ExpenseCategory.business) {
-          stats['businessExpenses'] = stats['businessExpenses']! + item['amount'] as double;
-        } else if (category == ExpenseCategory.personalPayout) {
-          stats['personalPayout'] = stats['personalPayout']! + item['amount'] as double;
-        }
-      }
-      
-      stats['netProfit'] = stats['revenue']! - stats['stockDeployed']! - stats['businessExpenses']! - stats['personalPayout']!;
-    }
-    
-    return weeklyStats;
-  }
-
-  int _getWeekOfMonth(DateTime date) {
-    final firstDayOfMonth = DateTime(date.year, date.month, 1);
-    final dayOfMonth = date.day;
-    return ((dayOfMonth - 1 + firstDayOfMonth.weekday - 1) / 7).floor() + 1;
   }
 
   String _getMonthName(int month) {
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     return months[month - 1];
+  }
+
+  Widget _buildMiniStat(String label, String value, {Color? color}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(color: AppTheme.slate400, fontSize: 11),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            color: color,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildCapitalProgressCard(
@@ -496,7 +517,8 @@ class FinanceScreen extends ConsumerWidget {
     final expenses = ref.watch(expenseProvider);
     final injections = expenses
         .where((e) => e.category == ExpenseCategory.capitalInjection)
-        .toList();
+        .toList()
+      ..sort((a, b) => b.expenseDate.compareTo(a.expenseDate));
         
     if (injections.isEmpty) {
       return const SizedBox.shrink();
@@ -695,6 +717,7 @@ class FinanceScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     _buildResumeRow(tr(ref, 'realized_profit'), CurrencyUtils.format(stats.totalNetProfit), isHighlight: true, isDarkMode: isDarkMode),
+                    _buildResumeRow(tr(ref, 'available_profit'), CurrencyUtils.format(stats.totalAvailableProfit), isDarkMode: isDarkMode),
                     _buildResumeRow(tr(ref, 'total_revenue'), CurrencyUtils.format(stats.totalRevenue), isDarkMode: isDarkMode),
                     _buildResumeRow(tr(ref, 'stock_cost'), CurrencyUtils.format(stats.totalStockDeployed), isDarkMode: isDarkMode),
                   ],
@@ -786,127 +809,147 @@ class FinanceScreen extends ConsumerWidget {
 
     // Calculate previous week's stats
     final now = DateTime.now();
-    final previousWeekEnd = WeeklyCheckup.getWeekStartDate(now).subtract(const Duration(days: 1));
-    final previousWeekStart = WeeklyCheckup.getWeekStartDate(previousWeekEnd);
-    
-    final rawSales = ref.read(saleProvider);
-    final allExpenses = ref.read(expenseProvider);
-    
-    final weekSales = rawSales.where((s) => 
-      (s.saleDate.isAfter(previousWeekStart) || s.saleDate.isAtSameMomentAs(previousWeekStart)) &&
-      s.saleDate.isBefore(previousWeekEnd.add(const Duration(days: 1))) &&
-      s.deletedAt == null
-    ).toList();
-    
-    final weekExpenses = allExpenses.where((e) => 
-      e.expenseDate.isAfter(previousWeekStart) || e.expenseDate.isAtSameMomentAs(previousWeekStart)
-    ).toList();
+    DateTime selectedWeekEnd = WeeklyCheckup.getWeekStartDate(now).subtract(const Duration(days: 1));
+    DateTime selectedWeekStart = WeeklyCheckup.getWeekStartDate(selectedWeekEnd);
 
-    final revenue = weekSales.where((s) => s.isPaid).fold<double>(0, (sum, s) => sum + s.totalAmount);
-    final weekStockExpenses = weekExpenses.where((e) => e.category == ExpenseCategory.stock);
-    final weekBusinessExpenses = weekExpenses.where((e) => e.category == ExpenseCategory.business);
-    final weekPayouts = weekExpenses.where((e) => e.category == ExpenseCategory.personalPayout);
-
-    final stockDeployed = weekStockExpenses.fold<double>(0, (sum, e) => sum + e.amount);
-    final businessCost = weekBusinessExpenses.fold<double>(0, (sum, e) => sum + e.amount);
-    final payout = weekPayouts.fold<double>(0, (sum, e) => sum + e.amount);
-
-    final recoveredFromSales = stockDeployed <= 0 ? 0.0 : (revenue < stockDeployed ? revenue : stockDeployed);
-    final remainingToRecover = stockDeployed - recoveredFromSales;
-    final netProfit = revenue - stockDeployed - businessCost - payout;
-    final salesCount = weekSales.where((s) => s.isPaid).length;
-
-    await showDialog(
+    return await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(tr(ref, 'weekly_checkup')),
-          content: SizedBox(
-            width: 500,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isDarkMode ? AppTheme.primaryBlue.withValues(alpha: 0.2) : AppTheme.primaryBlue.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
+        builder: (context, setState) {
+          final rawSales = ref.read(saleProvider);
+          final allExpenses = ref.read(expenseProvider);
+          final statsService = ref.read(financialStatsServiceProvider);
+
+          final weekSales = rawSales.where((s) =>
+            (s.saleDate.isAfter(selectedWeekStart) || s.saleDate.isAtSameMomentAs(selectedWeekStart)) &&
+            s.saleDate.isBefore(selectedWeekEnd.add(const Duration(days: 1))) &&
+            s.deletedAt == null
+          ).toList();
+
+          final weekExpenses = allExpenses.where((e) =>
+            (e.expenseDate.isAfter(selectedWeekStart) || e.expenseDate.isAtSameMomentAs(selectedWeekStart)) &&
+            e.expenseDate.isBefore(selectedWeekEnd.add(const Duration(days: 1)))
+          ).toList();
+
+          final summary = statsService.calculatePeriod(
+            sales: weekSales,
+            expenses: weekExpenses,
+          );
+
+          return AlertDialog(
+            title: Text(tr(ref, 'weekly_checkup')),
+            content: SizedBox(
+              width: 500,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    InkWell(
+                      onTap: () async {
+                        final DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedWeekEnd,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setState(() {
+                            selectedWeekEnd = WeeklyCheckup.getWeekEndDate(picked);
+                            selectedWeekStart = WeeklyCheckup.getWeekStartDate(selectedWeekEnd);
+                          });
+                        }
+                      },
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: tr(ref, 'week_end_date'),
+                          border: const OutlineInputBorder(),
+                          suffixIcon: const Icon(Icons.calendar_today),
+                        ),
+                        child: Text('${_formatDate(selectedWeekStart)} - ${_formatDate(selectedWeekEnd)}'),
+                      ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${tr(ref, 'previous_week')} (${_formatDate(previousWeekStart)} - ${_formatDate(previousWeekEnd)})', style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
-                        const SizedBox(height: 8),
-                        _buildResumeRow(tr(ref, 'stock_purchased'), CurrencyUtils.format(stockDeployed), isDarkMode: isDarkMode),
-                        _buildResumeRow(tr(ref, 'sales_revenue'), CurrencyUtils.format(revenue), isDarkMode: isDarkMode),
-                        _buildResumeRow(tr(ref, 'business_expenses'), CurrencyUtils.format(businessCost), isDarkMode: isDarkMode),
-                        _buildResumeRow(tr(ref, 'personal_payout'), CurrencyUtils.format(payout), isDarkMode: isDarkMode),
-                        const SizedBox(height: 4),
-                        _buildResumeRow(tr(ref, 'recovered_from_sales'), CurrencyUtils.format(recoveredFromSales), isHighlight: true, isDarkMode: isDarkMode),
-                        _buildResumeRow(tr(ref, 'remaining_to_recover'), CurrencyUtils.format(remainingToRecover), isDarkMode: isDarkMode),
-                        _buildResumeRow(tr(ref, 'realized_profit'), CurrencyUtils.format(netProfit), isHighlight: true, isDarkMode: isDarkMode),
-                      ],
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDarkMode ? AppTheme.primaryBlue.withValues(alpha: 0.2) : AppTheme.primaryBlue.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${tr(ref, 'summary')} (${_formatDate(selectedWeekStart)} - ${_formatDate(selectedWeekEnd)})', style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
+                          const SizedBox(height: 8),
+                          _buildResumeRow(tr(ref, 'stock_purchased'), CurrencyUtils.format(summary.stockDeployed), isDarkMode: isDarkMode),
+                          _buildResumeRow(tr(ref, 'sales_revenue'), CurrencyUtils.format(summary.revenue), isDarkMode: isDarkMode),
+                          _buildResumeRow(tr(ref, 'business_expenses'), CurrencyUtils.format(summary.businessCost), isDarkMode: isDarkMode),
+                          _buildResumeRow(tr(ref, 'personal_payout'), CurrencyUtils.format(summary.payout), isDarkMode: isDarkMode),
+                          const SizedBox(height: 4),
+          _buildResumeRow(tr(ref, 'recovered_from_sales'), CurrencyUtils.format(summary.recoveredFromSales), isDarkMode: isDarkMode),
+          _buildResumeRow(tr(ref, 'remaining_to_recover'), CurrencyUtils.format(summary.remainingToRecover), isDarkMode: isDarkMode),
+          _buildResumeRow(tr(ref, 'realized_profit'), CurrencyUtils.format(summary.realizedProfit), isHighlight: true, isDarkMode: isDarkMode),
+          _buildResumeRow(tr(ref, 'available_profit'), CurrencyUtils.format(summary.availableProfit), isDarkMode: isDarkMode),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(tr(ref, 'profit_distribution'), style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: payoutController,
-                    decoration: InputDecoration(
-                      labelText: tr(ref, 'profit_payout'),
-                      border: const OutlineInputBorder(),
-                      suffixText: 'XAF',
+                    const SizedBox(height: 16),
+                    Text(tr(ref, 'profit_distribution'), style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: payoutController,
+                      decoration: InputDecoration(
+                        labelText: tr(ref, 'profit_payout'),
+                        border: const OutlineInputBorder(),
+                        suffixText: 'XAF',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
+                      onChanged: (_) => setState(() {}),
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
-                    onChanged: (_) => setState(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: isDarkMode ? orangeColor.withValues(alpha: 0.2) : Colors.orange.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline_rounded, size: 16, color: orangeColor),
-                        const SizedBox(width: 6),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isDarkMode ? orangeColor.withValues(alpha: 0.2) : Colors.orange.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline_rounded, size: 16, color: orangeColor),
+                          const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            '${tr(ref, 'available_profit')}: ${CurrencyUtils.format(netProfit)}',
+                            '${tr(ref, 'available_profit')}: ${CurrencyUtils.format(summary.availableProfit - (double.tryParse(payoutController.text) ?? 0))}',
                             style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                           ),
                         ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: notesController,
-                    decoration: InputDecoration(
-                      labelText: '${tr(ref, 'notes')} (${tr(ref, 'optional')})',
-                      border: const OutlineInputBorder(),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: notesController,
+                      decoration: InputDecoration(
+                        labelText: '${tr(ref, 'notes')} (${tr(ref, 'optional')})',
+                        border: const OutlineInputBorder(),
+                      ),
+                      maxLines: 2,
                     ),
-                    maxLines: 2,
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          actions: [
+            actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text(tr(ref, 'cancel')),
             ),
             ElevatedButton(
               onPressed: () async {
-                final payout = double.tryParse(payoutController.text) ?? 0;
+                final requestedPayout = double.tryParse(payoutController.text) ?? 0;
                 
-                if (payout > netProfit) {
+                if (requestedPayout > summary.availableProfit) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(tr(ref, 'payout_exceed_profit'))),
                   );
@@ -914,26 +957,27 @@ class FinanceScreen extends ConsumerWidget {
                 }
 
                 final checkup = WeeklyCheckup()
-                  ..weekStartDate = previousWeekStart
-                  ..weekEndDate = previousWeekEnd
-                  ..totalStockPurchased = stockDeployed
-                  ..totalSalesRevenue = revenue
-                  ..totalBusinessExpenses = businessCost
-                  ..totalPersonalPayouts = payout
-                  ..capitalRecovered = recoveredFromSales
-                  ..capitalRemaining = remainingToRecover
-                  ..realizedProfit = netProfit
-                  ..profitPayoutTaken = payout
+                  ..weekStartDate = selectedWeekStart
+                  ..weekEndDate = selectedWeekEnd
+                  ..totalStockPurchased = summary.stockDeployed
+                  ..totalSalesRevenue = summary.revenue
+                  ..totalBusinessExpenses = summary.businessCost
+                  ..totalPersonalPayouts = summary.payout + requestedPayout
+                  ..capitalRecovered = summary.recoveredFromSales
+                  ..capitalRemaining = summary.remainingToRecover
+                  ..realizedProfit = summary.realizedProfit
+                  ..profitPayoutTaken = requestedPayout
                   ..profitReinjected = 0
-                  ..salesCount = salesCount
+                  ..salesCount = summary.salesCount
+                  ..checkupDate = selectedWeekEnd // Sync checkup date with the end of the selected week
                   ..notes = notesController.text;
 
                 await ref.read(weeklyCheckupProvider.notifier).addCheckup(checkup);
 
-                if (payout > 0) {
+                if (requestedPayout > 0) {
                   final payoutExpense = Expense()
                     ..description = tr(ref, 'weekly_payout_desc')
-                    ..amount = payout
+                    ..amount = requestedPayout
                     ..category = ExpenseCategory.personalPayout
                     ..notes = notesController.text;
                   await ref.read(expenseProvider.notifier).addExpense(payoutExpense);
@@ -945,8 +989,9 @@ class FinanceScreen extends ConsumerWidget {
               child: Text(tr(ref, 'complete_checkup')),
             ),
           ],
-        ),
-      ),
-    );
-  }
+        );
+      },
+    ),
+  );
+}
 }

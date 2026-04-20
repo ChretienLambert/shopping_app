@@ -2,10 +2,18 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/customer.dart';
 import '../services/hive_service.dart';
 import '../services/logging_service.dart';
+import '../services/sync_record_resolver.dart';
 
 class CustomerRepository {
   final _hive = HiveService.instance;
-  final _supabase = Supabase.instance.client;
+  
+  SupabaseClient? get _supabase {
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<List<Customer>> getAll() async {
     final box = _hive.customersBox;
@@ -21,17 +29,18 @@ class CustomerRepository {
     customer.updatedAt = DateTime.now();
     
     await box.put(customer.id, customer.toJson());
-
-    // Auto-sync disabled as per request
-    // if (_supabase.auth.currentUser != null) {
-    //   await syncOne(customer);
-    // }
   }
 
   Future<void> syncOne(Customer customer) async {
+    final client = _supabase;
+    if (client == null) {
+      logger.warning('Sync skipped: Supabase not initialized');
+      return;
+    }
+
     try {
       final box = _hive.customersBox;
-      final currentUser = _supabase.auth.currentUser;
+      final currentUser = client.auth.currentUser;
       
       if (currentUser == null) {
         logger.info('Sync skipped (No authenticated user)');
@@ -51,7 +60,7 @@ class CustomerRepository {
         'updated_at': customer.updatedAt.toIso8601String(),
       };
 
-      final response = await _supabase
+      final response = await client
           .from('customers')
           .upsert(data, onConflict: 'server_id')
           .select()
@@ -79,11 +88,6 @@ class CustomerRepository {
     customer.isDirty = true;
     
     await box.put(customer.id, customer.toJson());
-
-    // Auto-sync disabled as per request
-    // if (_supabase.auth.currentUser != null) {
-    //   await syncOne(customer);
-    // }
   }
 
   Future<void> syncDirty() async {
@@ -103,9 +107,12 @@ class CustomerRepository {
   }
 
   Future<void> pullAll({DateTime? lastSync}) async {
+    final client = _supabase;
+    if (client == null) return;
+
     try {
       final box = _hive.customersBox;
-      var query = _supabase.from('customers').select();
+      var query = client.from('customers').select();
       
       if (lastSync != null) {
         query = query.gt('updated_at', lastSync.toIso8601String());
@@ -116,24 +123,39 @@ class CustomerRepository {
       
       for (var data in remoteData) {
         final String sId = data['server_id'];
-        
-        final existing = box.values
-            .map((c) => Customer.fromJson(c))
-            .firstWhere((c) => c.serverId == sId, orElse: () => Customer());
 
-        existing.serverId = sId;
-        existing.name = data['name'];
-        existing.phoneNumber = data['phone_number'];
-        existing.email = data['email'];
-        existing.address = data['address'];
-        existing.notes = data['notes'];
-        existing.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
-        existing.createdAt = DateTime.parse(data['created_at']);
-        existing.updatedAt = DateTime.parse(data['updated_at']);
-        existing.isDirty = false;
-        existing.lastSyncedAt = DateTime.now();
+        final existingJson = SyncRecordResolver.findExistingRecord(
+          box.values,
+          localId: sId,
+          serverId: sId,
+        );
         
-        await box.put(existing.id, existing.toJson());
+        if (existingJson != null) {
+          final existing = Customer.fromJson(existingJson);
+          if (existing.isDirty) continue;
+          
+          final remoteUpdatedAt = DateTime.parse(data['updated_at']);
+          if (!remoteUpdatedAt.isAfter(existing.updatedAt)) {
+            continue;
+          }
+        }
+
+        final customer = existingJson != null
+            ? Customer.fromJson(existingJson)
+            : Customer(id: SyncRecordResolver.stableLocalId(existingJson: existingJson, remoteServerId: sId));
+        customer.serverId = sId;
+        customer.name = data['name'];
+        customer.phoneNumber = data['phone_number'];
+        customer.email = data['email'];
+        customer.address = data['address'];
+        customer.notes = data['notes'];
+        customer.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
+        customer.createdAt = DateTime.parse(data['created_at']);
+        customer.updatedAt = DateTime.parse(data['updated_at']);
+        customer.isDirty = false;
+        customer.lastSyncedAt = DateTime.now();
+        
+        await box.put(customer.id, customer.toJson());
       }
       logger.info('Pulled all customers from cloud');
     } catch (e, stack) {

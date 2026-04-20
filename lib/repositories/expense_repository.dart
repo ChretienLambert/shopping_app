@@ -4,6 +4,7 @@ import '../models/expense.dart';
 import '../services/hive_service.dart';
 import '../services/logging_service.dart';
 import '../services/storage_service.dart';
+import '../services/sync_record_resolver.dart';
 
 class ExpenseRepository {
   final _hive = HiveService.instance;
@@ -229,38 +230,55 @@ class ExpenseRepository {
         final String? sId = data['server_id'];
         if (sId == null) continue;
 
-        final existing = box.values
-            .map((e) => Expense.fromJson(e))
-            .firstWhere((e) => e.serverId == sId, orElse: () => Expense());
+        final existingJson = SyncRecordResolver.findExistingRecord(
+          box.values,
+          localId: sId,
+          serverId: sId,
+        );
 
-        existing.serverId = sId;
-        existing.description = data['description'];
-        existing.amount = (data['amount'] as num).toDouble();
+        if (existingJson != null) {
+          final existing = Expense.fromJson(existingJson);
+          if (existing.isDirty) {
+            logger.info('Skipping pull for dirty expense: ${existing.description}');
+            continue;
+          }
+          final remoteUpdatedAt = DateTime.parse(data['updated_at']);
+          if (!remoteUpdatedAt.isAfter(existing.updatedAt)) {
+            continue;
+          }
+        }
+
+        final expense = existingJson != null
+            ? Expense.fromJson(existingJson)
+            : Expense(id: SyncRecordResolver.stableLocalId(existingJson: existingJson, remoteServerId: sId));
+        expense.serverId = sId;
+        expense.description = data['description'];
+        expense.amount = (data['amount'] as num).toDouble();
         final rawCategory = (data['category'] as String?) ?? '';
-        existing.category = _mapRemoteCategory(rawCategory);
-        existing.expenseDate = DateTime.parse(data['expense_date']);
-        existing.notes = data['notes'];
-        existing.receiptImagePath = data['receipt_image_path'];
-        existing.stockProductName = data['stock_product_name'];
-        existing.stockProductType = data['stock_product_type'];
-        existing.stockQuality = data['stock_quality'];
-        existing.stockQuantity = data['stock_quantity'];
-        existing.stockPurchasePrice =
+        expense.category = _mapRemoteCategory(rawCategory);
+        expense.expenseDate = DateTime.parse(data['expense_date']);
+        expense.notes = data['notes'];
+        expense.receiptImagePath = data['receipt_image_path'];
+        expense.stockProductName = data['stock_product_name'];
+        expense.stockProductType = data['stock_product_type'];
+        expense.stockQuality = data['stock_quality'];
+        expense.stockQuantity = data['stock_quantity'];
+        expense.stockPurchasePrice =
             data['stock_purchase_price'] != null
                 ? (data['stock_purchase_price'] as num).toDouble()
                 : null;
-        existing.stockResalePrice =
+        expense.stockResalePrice =
             data['stock_resale_price'] != null
                 ? (data['stock_resale_price'] as num).toDouble()
                 : null;
-        existing.stockImagePath = data['stock_image_path'];
-        existing.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
-        existing.createdAt = DateTime.parse(data['created_at']);
-        existing.updatedAt = DateTime.parse(data['updated_at']);
-        existing.isDirty = false;
-        existing.lastSyncedAt = DateTime.now();
+        expense.stockImagePath = data['stock_image_path'];
+        expense.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
+        expense.createdAt = DateTime.parse(data['created_at']);
+        expense.updatedAt = DateTime.parse(data['updated_at']);
+        expense.isDirty = false;
+        expense.lastSyncedAt = DateTime.now();
 
-        await box.put(existing.id, existing.toJson());
+        await box.put(expense.id, expense.toJson());
       }
       logger.info('Pulled all expenses from cloud');
     } catch (e, stack) {

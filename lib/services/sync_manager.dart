@@ -8,11 +8,16 @@ import '../repositories/sale_repository.dart';
 import '../repositories/expense_repository.dart';
 import '../repositories/weekly_checkup_repository.dart';
 import '../services/hive_service.dart';
+import 'app_config.dart';
 import 'logging_service.dart';
 
 class SyncManager {
+  SyncManager(this._config) {
+    _init();
+  }
+
+  final AppConfig _config;
   final _connectivity = Connectivity();
-  final _supabase = Supabase.instance.client;
   
   final _customerRepo = CustomerRepository();
   final _productRepo = ProductRepository();
@@ -23,17 +28,19 @@ class SyncManager {
   bool _isSyncInProgress = false;
   String? _lastError;
 
-  SyncManager() {
-    _init();
+  void _init() async {
+    // Real-time sync intentionally disabled.
   }
 
-  void _init() async {
-    // Real-time sync disabled as per request
-    // await _updateOnlineStatus();
-
-    // if (_isOnline && _supabase.auth.currentUser != null) {
-    //   syncAll();
-    // }
+  SupabaseClient? get _supabase {
+    if (!_config.hasSupabaseConfig) {
+      return null;
+    }
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _updateOnlineStatus() async {
@@ -64,12 +71,20 @@ class SyncManager {
   /// Tests connectivity by performing a simple query.
   /// Returns null if successful, or an error message if failed.
   Future<String?> checkConnection() async {
+    if (!_config.hasSupabaseConfig) {
+      return 'Cloud sync is disabled because Supabase config is missing.';
+    }
+
     await _updateOnlineStatus();
     if (!_isOnline) return 'Device is offline. Check your internet connection.';
     
     try {
+      final client = _supabase;
+      if (client == null) {
+        return 'Supabase client is unavailable.';
+      }
       // Smallest possible query to verify table existence and credentials
-      await _supabase.from('products').select('id').limit(1);
+      await client.from('products').select('id').limit(1);
       _lastError = null;
       return null;
     } catch (e) {
@@ -84,8 +99,9 @@ class SyncManager {
       logger.info('Sync already running. Skipping duplicate syncAll call.');
       return;
     }
+    final client = _supabase;
     await _updateOnlineStatus();
-    if (!_isOnline || _supabase.auth.currentUser == null) {
+    if (!_isOnline || client?.auth.currentUser == null) {
       logger.info('Sync skipped: Offline or not logged in.');
       return;
     }
@@ -97,6 +113,7 @@ class SyncManager {
       final settings = HiveService.instance.settingsBox;
       final lastSyncStr = settings.get('last_synced_at') as String?;
       final DateTime? lastSync = lastSyncStr != null ? DateTime.parse(lastSyncStr) : null;
+      final syncStartedAt = DateTime.now();
 
       // Pull records updated after local latest
       await _customerRepo.pullAll(lastSync: lastSync);
@@ -107,9 +124,17 @@ class SyncManager {
       
       // Push local "dirty" changes
       await pushAll();
+
+      // Reconcile once more after push so locally-created offline records pick up
+      // remote identifiers and any server-side updates in the same sync session.
+      await _customerRepo.pullAll(lastSync: lastSync);
+      await _productRepo.pullAll(lastSync: lastSync);
+      await _saleRepo.pullAll(lastSync: lastSync);
+      await _expenseRepo.pullAll(lastSync: lastSync);
+      await _weeklyRepo.pullAll(lastSync: lastSync);
       
       // Save sync timestamp
-      await settings.put('last_synced_at', DateTime.now().toIso8601String());
+      await settings.put('last_synced_at', syncStartedAt.toIso8601String());
 
       logger.info('Sync process completed.');
       _lastError = null;
@@ -139,8 +164,9 @@ class SyncManager {
       logger.info('Sync already running. Skipping duplicate initial sync.');
       return;
     }
+    final client = _supabase;
     await _updateOnlineStatus();
-    if (!_isOnline || _supabase.auth.currentUser == null) {
+    if (!_isOnline || client?.auth.currentUser == null) {
       logger.warning('Cannot perform initial sync: Offline or not logged in.');
       return;
     }
@@ -165,8 +191,9 @@ class SyncManager {
   }
 
   Future<void> pushAll() async {
+    final client = _supabase;
     await _updateOnlineStatus();
-    if (!_isOnline || _supabase.auth.currentUser == null) {
+    if (!_isOnline || client?.auth.currentUser == null) {
       logger.info('Push skipped: Offline or not logged in.');
       return;
     }

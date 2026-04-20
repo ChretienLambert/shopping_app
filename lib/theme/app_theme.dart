@@ -78,6 +78,10 @@ class AppTheme {
   static const Color chart3 = Color(0xFFEC4899); // Pink
   static const Color chart4 = Color(0xFFF59E0B); // Amber
   static const Color chart5 = Color(0xFF10B981); // Emerald
+
+  static const Color success = Color(0xFF10B981); // Emerald-500
+  static const Color warning = Color(0xFFF59E0B); // Amber-500
+  static const Color info = Color(0xFF3B82F6); // Blue-500
   
   // Spacing & Radiology
   static const double radius = 12.0; 

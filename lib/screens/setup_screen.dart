@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/language_provider.dart';
-import '../providers/initial_capital_provider.dart';
 import '../utils/app_localization.dart';
 
 class SetupScreen extends ConsumerStatefulWidget {
@@ -18,23 +17,20 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   static const _setupCompletedKey = 'app_setup_completed';
   static const _languageKey = 'app_language';
 
-  final _capitalController = TextEditingController();
   String _selectedLanguage = 'en';
   bool _saving = false;
 
   @override
   void dispose() {
-    _capitalController.dispose();
     super.dispose();
   }
 
   Future<void> _completeSetup() async {
-    final initialCapital = double.tryParse(_capitalController.text) ?? 0;
     setState(() => _saving = true);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_languageKey, _selectedLanguage);
     await ref.read(languageProvider.notifier).setLanguage(_selectedLanguage);
-    await ref.read(initialCapitalProvider.notifier).updateCapital(initialCapital);
+    
     await prefs.setBool(_setupCompletedKey, true);
     if (mounted) {
       widget.onCompleted();
@@ -127,38 +123,6 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                           ref.read(languageProvider.notifier).setLanguage(value);
                         }
                       },
-                    ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    // Initial Capital
-                    Text(
-                      tr(ref, 'initial_capital'),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _capitalController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: InputDecoration(
-                        hintText: '0.00',
-                        filled: true,
-                        fillColor: Colors.grey[50],
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        prefixIcon: const Icon(Icons.account_balance_wallet_outlined),
-                      ),
                     ),
                     
                     const SizedBox(height: 32),

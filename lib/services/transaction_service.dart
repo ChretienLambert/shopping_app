@@ -1,4 +1,3 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/sale.dart';
 import '../models/sale_item.dart';
 import '../models/product.dart';
@@ -23,8 +22,6 @@ class TransactionService {
     List<SaleItem> items,
   ) async {
     // Create snapshots for rollback
-    final saleSnapshot = sale.toJson();
-    final itemsSnapshots = items.map((i) => i.toJson()).toList();
     final productSnapshots = <String, Map>{};
 
     try {
@@ -92,7 +89,6 @@ class TransactionService {
       throw Exception('This transaction is only for stock expenses');
     }
 
-    final expenseSnapshot = expense.toJson();
     Map<String, Map>? productSnapshots;
 
     try {

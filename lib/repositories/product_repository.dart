@@ -3,6 +3,7 @@ import '../models/product.dart';
 import '../services/hive_service.dart';
 import '../services/logging_service.dart';
 import '../services/storage_service.dart';
+import '../services/sync_record_resolver.dart';
 
 class ProductRepository {
   final _hive = HiveService.instance;
@@ -130,28 +131,44 @@ class ProductRepository {
       for (var data in remoteData) {
         final String? sId = data['server_id'];
         if (sId == null) continue;
-        
-        // Find existing local product by serverId
-        final existing = box.values
-            .map((p) => Product.fromJson(p))
-            .firstWhere((p) => p.serverId == sId, orElse: () => Product());
 
-        existing.serverId = sId;
-        existing.name = data['name'];
-        existing.description = data['description'];
-        existing.price = (data['price'] as num).toDouble();
-        existing.purchasePrice = ((data['purchase_price'] ?? 0) as num).toDouble();
-        existing.stockQuantity = data['stock_quantity'];
-        existing.imagePath = data['image_path'];
-        existing.productType = data['product_type'];
-        existing.quality = data['quality'];
-        existing.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
-        existing.createdAt = DateTime.parse(data['created_at']);
-        existing.updatedAt = DateTime.parse(data['updated_at']);
-        existing.isDirty = false;
-        existing.lastSyncedAt = DateTime.now();
+        final existingJson = SyncRecordResolver.findExistingRecord(
+          box.values,
+          localId: sId,
+          serverId: sId,
+        );
+
+        if (existingJson != null) {
+          final existing = Product.fromJson(existingJson);
+          if (existing.isDirty) {
+            logger.info('Skipping pull for dirty product: ${existing.name}');
+            continue;
+          }
+          final remoteUpdatedAt = DateTime.parse(data['updated_at']);
+          if (!remoteUpdatedAt.isAfter(existing.updatedAt)) {
+            continue;
+          }
+        }
+
+        final product = existingJson != null
+            ? Product.fromJson(existingJson)
+            : Product(id: SyncRecordResolver.stableLocalId(existingJson: existingJson, remoteServerId: sId));
+        product.serverId = sId;
+        product.name = data['name'];
+        product.description = data['description'];
+        product.price = (data['price'] as num).toDouble();
+        product.purchasePrice = ((data['purchase_price'] ?? 0) as num).toDouble();
+        product.stockQuantity = data['stock_quantity'];
+        product.imagePath = data['image_path'];
+        product.productType = data['product_type'];
+        product.quality = data['quality'];
+        product.deletedAt = data['deleted_at'] != null ? DateTime.parse(data['deleted_at']) : null;
+        product.createdAt = DateTime.parse(data['created_at']);
+        product.updatedAt = DateTime.parse(data['updated_at']);
+        product.isDirty = false;
+        product.lastSyncedAt = DateTime.now();
         
-        await box.put(existing.id, existing.toJson());
+        await box.put(product.id, product.toJson());
       }
       logger.info('Pulled all products from cloud');
     } catch (e, stack) {

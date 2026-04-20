@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -6,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/expense.dart';
 import '../providers/expense_provider.dart';
@@ -17,7 +15,6 @@ import '../utils/app_localization.dart';
 import '../utils/currency_utils.dart';
 import '../widgets/smart_image.dart';
 import '../services/logging_service.dart';
-import '../providers/financial_stats_provider.dart';
 import '../services/storage_service.dart';
 
 class ExpensesScreen extends ConsumerStatefulWidget {
@@ -252,10 +249,10 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              CurrencyUtils.format(expense.amount),
-              style: const TextStyle(
+              '${expense.category == ExpenseCategory.capitalInjection ? "+" : ""}${CurrencyUtils.format(expense.amount)}',
+              style: TextStyle(
                 fontWeight: FontWeight.w900,
-                color: Colors.redAccent,
+                color: expense.category == ExpenseCategory.capitalInjection ? Colors.green : Colors.redAccent,
                 fontSize: 15,
               ),
             ),
@@ -435,19 +432,6 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   }
 
   Future<void> _showExpenseDialog() async {
-    // Load initial capital and injections
-    final prefs = await SharedPreferences.getInstance();
-    final initialCapital = prefs.getDouble('finance_initial_capital') ?? 0.0;
-    final injectionsJson = prefs.getStringList('finance_capital_injections') ?? [];
-    final injectedCapital = injectionsJson.fold<double>(0, (sum, json) {
-      try {
-        final data = jsonDecode(json) as Map<String, dynamic>;
-        return sum + (data['amount'] as num).toDouble();
-      } catch (_) {
-        return sum;
-      }
-    });
-
     final formKey = GlobalKey<FormState>();
     final descriptionController = TextEditingController();
     final amountController = TextEditingController();
@@ -486,7 +470,10 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           final currentStockSpent = currentExpenses
               .where((e) => e.category == ExpenseCategory.stock)
               .fold<double>(0, (sum, e) => sum + e.amount);
-          final currentCapitalPool = initialCapital + injectedCapital + currentRevenue - currentStockSpent;
+          final totalInjections = currentExpenses
+              .where((e) => e.category == ExpenseCategory.capitalInjection)
+              .fold<double>(0, (sum, e) => sum + e.amount);
+          final currentCapitalPool = totalInjections + currentRevenue - currentStockSpent;
           
           return AlertDialog(
           title: Text(tr(ref, 'add_expense')),
@@ -908,19 +895,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
 
                     // Validation: Expense amount must not exceed available capital (uses capital now, not profit)
                     if (!isStock) {
-                      final isPayout = selectedCategory == ExpenseCategory.personalPayout;
                       final expenseAmount = double.tryParse(amountController.text) ?? 0;
                       
-                      if (isPayout) {
-                        final availableProfit = ref.read(financialStatsProvider).availableProfit;
-                        if (expenseAmount > availableProfit) {
-                          setState(() {
-                            _validationError = '${tr(ref, 'payout_reinject_exceed')}: ${CurrencyUtils.format(availableProfit)}';
-                            isSaving = false;
-                          });
-                          return;
-                        }
-                      } else if (expenseAmount > currentCapitalPool) {
+                      if (expenseAmount > currentCapitalPool) {
                         setState(() {
                           _validationError = '${tr(ref, 'insufficient_capital')}: ${CurrencyUtils.format(currentCapitalPool)}';
                           isSaving = false;
