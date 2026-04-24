@@ -18,30 +18,60 @@ class FinanceScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stats = ref.watch(financialStatsProvider);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bool isMobile = screenWidth < 700;
 
-    final profitControlCards = Row(
-      children: [
-        Expanded(
-          child: _buildStatCard(
-            context,
-            tr(ref, 'available_profit'),
-            CurrencyUtils.format(stats.totalAvailableProfit),
-            Icons.savings_rounded,
-            Colors.green,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildStatCard(
-            context,
-            tr(ref, 'salary_from_profit'),
-            CurrencyUtils.format(stats.totalPayout),
-            Icons.payments_rounded,
-            AppTheme.primaryBlue,
-          ),
-        ),
-      ],
-    );
+    final profitControlCards = isMobile && screenWidth < 400
+      ? Column(
+          children: [
+            _buildStatCard(
+              context,
+              ref,
+              tr(ref, 'available_profit'),
+              CurrencyUtils.format(stats.totalAvailableProfit),
+              Icons.savings_rounded,
+              Colors.green,
+              description: tr(ref, 'available_profit_desc'),
+            ),
+            const SizedBox(height: 12),
+            _buildStatCard(
+              context,
+              ref,
+              tr(ref, 'salary_from_profit'),
+              CurrencyUtils.format(stats.totalPayout),
+              Icons.payments_rounded,
+              AppTheme.primaryBlue,
+              description: tr(ref, 'salary_from_profit_desc'),
+            ),
+          ],
+        )
+      : Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                context,
+                ref,
+                tr(ref, 'available_profit'),
+                CurrencyUtils.format(stats.totalAvailableProfit),
+                Icons.savings_rounded,
+                Colors.green,
+                description: tr(ref, 'available_profit_desc'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatCard(
+                context,
+                ref,
+                tr(ref, 'salary_from_profit'),
+                CurrencyUtils.format(stats.totalPayout),
+                Icons.payments_rounded,
+                AppTheme.primaryBlue,
+                description: tr(ref, 'salary_from_profit_desc'),
+              ),
+            ),
+          ],
+        );
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -74,7 +104,7 @@ class FinanceScreen extends ConsumerWidget {
                     ),
                     SizedBox(
                       width: constraints.maxWidth > 600 ? (constraints
-                          .maxWidth - 24) / 3 : constraints.maxWidth,
+                          .maxWidth - 36) / 4 : constraints.maxWidth,
                       child: OutlinedButton.icon(
                         onPressed: () => _addInjection(context, ref),
                         icon: const Icon(Icons.add_circle_outline_rounded),
@@ -84,7 +114,7 @@ class FinanceScreen extends ConsumerWidget {
                     ),
                     SizedBox(
                       width: constraints.maxWidth > 600 ? (constraints
-                          .maxWidth - 24) / 3 : constraints.maxWidth,
+                          .maxWidth - 36) / 4 : constraints.maxWidth,
                       child: OutlinedButton.icon(
                         onPressed: () =>
                             _showWeeklyCheckupDialog(
@@ -109,53 +139,63 @@ class FinanceScreen extends ConsumerWidget {
               runSpacing: 12,
               children: [
                 SizedBox(
-                  width: 220,
+                  width: screenWidth < 500 ? (screenWidth - 60) / 2 : 220,
                   child: _buildStatCard(
                     context,
+                    ref,
                     tr(ref, 'capital_pool'),
                     CurrencyUtils.format(stats.capitalPool),
                     Icons.account_balance_wallet_rounded,
                     AppTheme.primaryBlue,
+                    description: tr(ref, 'capital_pool_desc'),
                   ),
                 ),
                 SizedBox(
-                  width: 220,
+                  width: screenWidth < 500 ? (screenWidth - 60) / 2 : 220,
                   child: _buildStatCard(
                     context,
+                    ref,
                     tr(ref, 'cash_capital'),
                     CurrencyUtils.format(stats.cashCapital),
                     Icons.payments_rounded,
                     Colors.green,
+                    description: tr(ref, 'cash_capital_desc'),
                   ),
                 ),
                 SizedBox(
-                  width: 220,
+                  width: screenWidth < 500 ? (screenWidth - 60) / 2 : 220,
                   child: _buildStatCard(
                     context,
+                    ref,
                     tr(ref, 'assets_capital'),
                     CurrencyUtils.format(stats.assetsCapital),
                     Icons.inventory_2_rounded,
                     Colors.orange,
+                    description: tr(ref, 'assets_capital_desc'),
                   ),
                 ),
                 SizedBox(
-                  width: 220,
+                  width: screenWidth < 500 ? (screenWidth - 60) / 2 : 220,
                   child: _buildStatCard(
                     context,
+                    ref,
                     tr(ref, 'stock_deployed'),
                     CurrencyUtils.format(stats.totalStockDeployed),
                     Icons.inventory_2_outlined,
                     AppTheme.primary,
+                    description: tr(ref, 'stock_deployed_desc'),
                   ),
                 ),
                 SizedBox(
-                  width: 220,
+                  width: screenWidth < 500 ? (screenWidth - 60) / 2 : 220,
                   child: _buildStatCard(
                     context,
+                    ref,
                     tr(ref, 'sales_count'),
                     '${stats.totalSalesCount}',
                     Icons.shopping_bag_rounded,
                     Colors.purple,
+                    description: tr(ref, 'sales_count_desc'),
                   ),
                 ),
               ],
@@ -208,7 +248,36 @@ class FinanceScreen extends ConsumerWidget {
     final sortedMonths = monthlyGroups.keys.toList()..sort((a, b) => b.compareTo(a));
 
     if (checkups.isEmpty) {
-      return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            tr(ref, 'monthly_performance'),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(24),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.slate200),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.history_rounded, size: 48, color: AppTheme.slate300),
+                const SizedBox(height: 12),
+                Text(
+                  tr(ref, 'complete_first_checkup_desc'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppTheme.slate500),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
     }
 
     return Column(
@@ -252,7 +321,7 @@ class FinanceScreen extends ConsumerWidget {
             margin: const EdgeInsets.only(bottom: 16),
             child: ExpansionTile(
               title: Text(
-                '${_getMonthName(month)} $year',
+                '${_getMonthName(month, ref)} $year',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               subtitle: Text(
@@ -336,8 +405,21 @@ class FinanceScreen extends ConsumerWidget {
     );
   }
 
-  String _getMonthName(int month) {
-    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  String _getMonthName(int month, WidgetRef ref) {
+    final months = [
+      tr(ref, 'january'),
+      tr(ref, 'february'),
+      tr(ref, 'march'),
+      tr(ref, 'april'),
+      tr(ref, 'may'),
+      tr(ref, 'june'),
+      tr(ref, 'july'),
+      tr(ref, 'august'),
+      tr(ref, 'september'),
+      tr(ref, 'october'),
+      tr(ref, 'november'),
+      tr(ref, 'december'),
+    ];
     return months[month - 1];
   }
 
@@ -445,10 +527,10 @@ class FinanceScreen extends ConsumerWidget {
         children: [
           Text(tr(ref, 'finance_summary'), style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
           const SizedBox(height: 10),
-          _buildSummaryRow(tr(ref, 'revenue'), CurrencyUtils.format(revenue)),
-          _buildSummaryRow(tr(ref, 'stock_deployed'), CurrencyUtils.format(stockDeployed)),
-          _buildSummaryRow(tr(ref, 'business_expenses'), CurrencyUtils.format(businessExpenses)),
-          _buildSummaryRow(tr(ref, 'owner_salary'), CurrencyUtils.format(personalPayouts)),
+          _buildSummaryRow(tr(ref, 'revenue'), CurrencyUtils.format(revenue), tooltip: tr(ref, 'revenue_help')),
+          _buildSummaryRow(tr(ref, 'stock_deployed'), CurrencyUtils.format(stockDeployed), tooltip: tr(ref, 'stock_cost_help')),
+          _buildSummaryRow(tr(ref, 'business_expenses'), CurrencyUtils.format(businessExpenses), tooltip: tr(ref, 'business_expenses_help')),
+          _buildSummaryRow(tr(ref, 'owner_salary'), CurrencyUtils.format(personalPayouts), tooltip: tr(ref, 'owner_salary_help')),
           Divider(height: 22, color: isDarkMode ? AppTheme.slate700 : AppTheme.slate200),
           _buildSummaryRow(tr(ref, 'gross_margin'), '${(grossMargin * 100).toStringAsFixed(1)}%', tooltip: tr(ref, 'gross_margin_help')),
           _buildSummaryRow(tr(ref, 'operating_margin'), '${(operatingMargin * 100).toStringAsFixed(1)}%', tooltip: tr(ref, 'operating_margin_help')),
@@ -471,7 +553,12 @@ class FinanceScreen extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Expanded(child: Text(label, style: TextStyle(color: AppTheme.slate400), overflow: TextOverflow.ellipsis)),
+          Expanded(
+            child: Tooltip(
+              message: tooltip ?? label,
+              child: Text(label, style: TextStyle(color: AppTheme.slate400), overflow: TextOverflow.ellipsis),
+            ),
+          ),
           const SizedBox(width: 8),
           tooltip != null
               ? Tooltip(
@@ -484,9 +571,9 @@ class FinanceScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatCard(BuildContext context, String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(BuildContext context, WidgetRef ref, String title, String value, IconData icon, Color color, {String? description}) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
@@ -511,6 +598,21 @@ class FinanceScreen extends ConsumerWidget {
         ],
       ),
     );
+
+    if (description != null) {
+      return Tooltip(
+        message: description,
+        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        decoration: BoxDecoration(
+          color: AppTheme.slate900.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        textStyle: const TextStyle(color: Colors.white, fontSize: 12),
+        child: card,
+      );
+    }
+    return card;
   }
 
   Widget _buildInjectionsList(BuildContext context, WidgetRef ref) {
@@ -529,13 +631,16 @@ class FinanceScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(tr(ref, 'capital_injections'), style: TextStyle(fontWeight: FontWeight.bold)),
+        Text(tr(ref, 'capital_injections'), style: const TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         ...injections.map((i) {
+          final description = i.description == 'Capital Injection' 
+              ? tr(ref, 'capital_injection_title') 
+              : i.description;
           return ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.add_circle_outline_rounded),
-            title: Text(i.description),
+            title: Text(description),
             subtitle: Text('${i.expenseDate.day}/${i.expenseDate.month}/${i.expenseDate.year}'),
             trailing: Text(
               CurrencyUtils.format(i.amount),
@@ -549,6 +654,9 @@ class FinanceScreen extends ConsumerWidget {
   }
 
   void _showInjectionDetail(BuildContext context, WidgetRef ref, Expense injection) {
+    final description = injection.description == 'Capital Injection' 
+        ? tr(ref, 'capital_injection_title') 
+        : injection.description;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -557,10 +665,9 @@ class FinanceScreen extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildDetailRow(tr(ref, 'description'), injection.description),
+            _buildDetailRow(tr(ref, 'description'), description),
             _buildDetailRow(tr(ref, 'amount'), CurrencyUtils.format(injection.amount)),
             _buildDetailRow(tr(ref, 'date'), '${injection.expenseDate.day}/${injection.expenseDate.month}/${injection.expenseDate.year}'),
-            _buildDetailRow(tr(ref, 'time'), '${injection.expenseDate.hour.toString().padLeft(2, '0')}:${injection.expenseDate.minute.toString().padLeft(2, '0')}'),
           ],
         ),
         actions: [
@@ -601,42 +708,68 @@ class FinanceScreen extends ConsumerWidget {
   Future<void> _addInjection(BuildContext context, WidgetRef ref) async {
     final amountController = TextEditingController();
     final descriptionController = TextEditingController();
+    DateTime selectedDate = DateTime.now();
+    
     final result = await showDialog<Expense>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(tr(ref, 'inject_capital')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: tr(ref, 'amount_xaf')),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: descriptionController,
-              decoration: InputDecoration(labelText: tr(ref, 'description')),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(tr(ref, 'inject_capital')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(labelText: tr(ref, 'amount_xaf')),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descriptionController,
+                decoration: InputDecoration(labelText: tr(ref, 'description')),
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: () async {
+                  final DateTime? picked = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) {
+                    setState(() => selectedDate = picked);
+                  }
+                },
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: tr(ref, 'date'),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: const Icon(Icons.calendar_today),
+                  ),
+                  child: Text('${selectedDate.day}/${selectedDate.month}/${selectedDate.year}'),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(tr(ref, 'cancel'))),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(
+                context,
+                Expense(
+                  amount: double.tryParse(amountController.text) ?? 0,
+                  description: descriptionController.text.isEmpty
+                      ? tr(ref, 'cash_capital_injection')
+                      : descriptionController.text,
+                  category: ExpenseCategory.capitalInjection,
+                  expenseDate: selectedDate,
+                ),
+              ),
+              child: Text(tr(ref, 'add')),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr(ref, 'cancel'))),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(
-              context,
-              Expense(
-                amount: double.tryParse(amountController.text) ?? 0,
-                description: descriptionController.text.isEmpty
-                    ? tr(ref, 'cash_capital_injection')
-                    : descriptionController.text,
-                category: ExpenseCategory.capitalInjection,
-                expenseDate: DateTime.now(),
-              ),
-            ),
-            child: Text(tr(ref, 'add')),
-          ),
-        ],
       ),
     );
     if (result == null || result.amount <= 0) return;
@@ -795,6 +928,43 @@ class FinanceScreen extends ConsumerWidget {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
+  }
+
+  void _showFinancialLogicDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enterprise Financial Logic'),
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('How your data is calculated:', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 12),
+              Text('• Revenue: Total from all paid sales (Direct or Delivery).'),
+              Text('• Stock Deployed: Total cost of purchasing items in your inventory.'),
+              Text('• Business Expenses: Operational costs (rent, transport, packaging).'),
+              Text('• Realized Profit: (Revenue - Stock Deployed). This is your gross business performance.'),
+              Text('• Available Profit: (Realized Profit - Business Expenses - Payouts). This is your actual spendable cash.'),
+              SizedBox(height: 16),
+              Text('Capital Definitions:', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text('• Cash Capital: Total Injections + Sales - (Expenses + Payouts). This is what you have in hand.'),
+              Text('• Assets Capital: The value of all items currently in your stock.'),
+              Text('• Capital Pool: Cash Capital + Assets Capital. Your total business worth.'),
+              SizedBox(height: 16),
+              Text('Consistency Tips:', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text('The app syncs automatically every 3 minutes. On mobile, swipe down to refresh manually. The database is the master source; local changes are updated to match cloud state whenever you pull.'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Understood')),
+        ],
+      ),
+    );
   }
 
   Future<void> _showWeeklyCheckupDialog(

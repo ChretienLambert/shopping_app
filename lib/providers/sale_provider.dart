@@ -12,6 +12,7 @@ class SaleNotifier extends StateNotifier<List<Sale>> {
 
   Future<void> loadSales() async {
     final sales = await _repository.getAll();
+    if (!mounted) return;
     state = sales..sort((a, b) => b.saleDate.compareTo(a.saleDate));
   }
 

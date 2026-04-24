@@ -4,7 +4,7 @@ import '../services/sync_manager.dart';
 import 'auth_provider.dart';
 
 final syncManagerProvider = Provider<SyncManager>((ref) {
-  final syncManager = SyncManager(ref.watch(appConfigProvider));
+  final syncManager = SyncManager(ref.watch(appConfigProvider), ref);
   
   ref.listen<AsyncValue<AppSession?>>(appSessionProvider, (previous, next) {
     final previousSession = previous?.value;

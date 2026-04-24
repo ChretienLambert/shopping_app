@@ -101,11 +101,12 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   @override
   Widget build(BuildContext context) {
     final expenses = ref.watch(expenseProvider);
-    // Filter out personalPayout expenses from display
-    final nonPayoutExpenses = expenses.where((e) => e.category != ExpenseCategory.personalPayout).toList();
+    // Filter out personalPayout and capitalInjection from display
+    final filteredOutCategories = [ExpenseCategory.personalPayout, ExpenseCategory.capitalInjection];
+    final actualExpenses = expenses.where((e) => !filteredOutCategories.contains(e.category)).toList();
     final filteredExpenses = _selectedFilterCategory == null
-        ? nonPayoutExpenses
-        : nonPayoutExpenses.where((e) => e.category == _selectedFilterCategory).toList();
+        ? actualExpenses
+        : actualExpenses.where((e) => e.category == _selectedFilterCategory).toList();
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -178,7 +179,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
               },
             ),
           ),
-          ...ExpenseCategory.values.where((c) => c != ExpenseCategory.personalPayout).map((category) {
+          ...ExpenseCategory.values.where((c) => c != ExpenseCategory.personalPayout && c != ExpenseCategory.capitalInjection).map((category) {
             return Padding(
               padding: const EdgeInsets.only(right: 8),
               child: ChoiceChip(
@@ -196,6 +197,10 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   }
 
   Widget _buildExpenseCard(Expense expense) {
+    final description = expense.description.contains('Stock purchase')
+        ? expense.description.replaceFirst('Stock purchase', tr(ref, 'stock_purchased'))
+        : (expense.description == 'Capital Injection' ? tr(ref, 'capital_injection_title') : expense.description);
+
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 12),
@@ -221,7 +226,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              expense.description,
+              description,
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             if (expense.operationId != null)
@@ -240,7 +245,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
             ),
             const SizedBox(height: 2),
             Text(
-              '${_formatDate(expense.expenseDate)} • ${_formatTime(expense.expenseDate)}',
+              _formatDate(expense.expenseDate),
               style: TextStyle(color: AppTheme.slate400, fontSize: 12),
             ),
           ],
@@ -258,8 +263,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
             ),
             const SizedBox(width: 8),
             IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.red),
-              onPressed: () => _confirmDelete(expense),
+              icon: Icon(Icons.edit_outlined, color: AppTheme.primaryBlue, size: 20),
+              onPressed: () => _showExpenseDialog(expense: expense),
             ),
           ],
         ),
@@ -269,6 +274,10 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   }
 
   void _showExpenseDetails(Expense expense) {
+    final description = expense.description.contains('Stock purchase')
+        ? expense.description.replaceFirst('Stock purchase', tr(ref, 'stock_purchased'))
+        : (expense.description == 'Capital Injection' ? tr(ref, 'capital_injection_title') : expense.description);
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -278,10 +287,10 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _detailRow(tr(ref, 'description'), expense.description),
+              _detailRow(tr(ref, 'description'), description),
               _detailRow(tr(ref, 'amount'), CurrencyUtils.format(expense.amount)),
               _detailRow(tr(ref, 'category'), _getCategoryName(expense.category)),
-              _detailRow(tr(ref, 'date'), '${_formatDate(expense.expenseDate)} ${_formatTime(expense.expenseDate)}'),
+              _detailRow(tr(ref, 'date'), _formatDate(expense.expenseDate)),
               if (expense.notes != null && expense.notes!.isNotEmpty)
                 _detailRow(tr(ref, 'notes'), expense.notes!),
               if (expense.category == ExpenseCategory.stock) ...[
@@ -431,22 +440,22 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     );
   }
 
-  Future<void> _showExpenseDialog() async {
+  Future<void> _showExpenseDialog({Expense? expense}) async {
     final formKey = GlobalKey<FormState>();
-    final descriptionController = TextEditingController();
-    final amountController = TextEditingController();
-    final notesController = TextEditingController();
-    final stockNameController = TextEditingController();
-    final stockTypeController = TextEditingController();
-    final stockDescriptionController = TextEditingController();
-    final stockQuantityController = TextEditingController();
-    final stockPurchasePriceController = TextEditingController();
-    final stockResalePriceController = TextEditingController();
-    ExpenseCategory selectedCategory = ExpenseCategory.business;
-    DateTime selectedDate = DateTime.now();
-    String? receiptImagePath;
-    String? stockImagePath;
-    String selectedStockQuality = 'second_hand';
+    final descriptionController = TextEditingController(text: expense?.description);
+    final amountController = TextEditingController(text: expense?.amount.toString());
+    final notesController = TextEditingController(text: expense?.notes);
+    final stockNameController = TextEditingController(text: expense?.stockProductName);
+    final stockTypeController = TextEditingController(text: expense?.stockProductType);
+    final stockDescriptionController = TextEditingController(text: expense?.notes);
+    final stockQuantityController = TextEditingController(text: expense?.stockQuantity?.toString());
+    final stockPurchasePriceController = TextEditingController(text: expense?.stockPurchasePrice?.toString());
+    final stockResalePriceController = TextEditingController(text: expense?.stockResalePrice?.toString());
+    ExpenseCategory selectedCategory = expense?.category ?? ExpenseCategory.business;
+    DateTime selectedDate = expense?.expenseDate ?? DateTime.now();
+    String? receiptImagePath = expense?.receiptImagePath;
+    String? stockImagePath = expense?.stockImagePath;
+    String selectedStockQuality = expense?.stockQuality ?? 'second_hand';
     bool isSaving = false;
 
     if (!mounted) return;
@@ -463,7 +472,6 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
             projectedProfit = (resale - cost) * qty;
           }
           
-          // Recalculate capital pool inside StatefulBuilder
           final currentSales = ref.read(saleProvider);
           final currentExpenses = ref.read(expenseProvider);
           final currentRevenue = currentSales.fold<double>(0, (sum, sale) => sum + sale.totalAmount);
@@ -473,16 +481,21 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           final totalInjections = currentExpenses
               .where((e) => e.category == ExpenseCategory.capitalInjection)
               .fold<double>(0, (sum, e) => sum + e.amount);
-          final currentCapitalPool = totalInjections + currentRevenue - currentStockSpent;
+          
+          final double baseCapital = totalInjections + currentRevenue - currentStockSpent;
+          final double currentCapitalPool = expense != null && expense.category != ExpenseCategory.capitalInjection
+              ? baseCapital + expense.amount
+              : baseCapital;
           
           return AlertDialog(
-          title: Text(tr(ref, 'add_expense')),
+          title: Text(expense == null ? tr(ref, 'add_expense') : tr(ref, 'edit_expense')),
           content: Form(
             key: formKey,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                    if (expense == null) 
                     DropdownButtonFormField<ExpenseCategory>(
                       initialValue: selectedCategory,
                       decoration: InputDecoration(
@@ -508,7 +521,23 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                           setState(() => selectedCategory = value);
                         }
                       },
-                    ),
+                    ) else ...[
+                       Container(
+                         padding: const EdgeInsets.all(12),
+                         decoration: BoxDecoration(
+                           color: _getCategoryColor(selectedCategory).withValues(alpha: 0.1),
+                           borderRadius: BorderRadius.circular(12),
+                         ),
+                         child: Row(
+                           children: [
+                             Icon(_getCategoryIcon(selectedCategory), color: _getCategoryColor(selectedCategory), size: 20),
+                             const SizedBox(width: 12),
+                             Text(_getCategoryName(selectedCategory), style: const TextStyle(fontWeight: FontWeight.bold)),
+                           ],
+                         ),
+                       ),
+                       const SizedBox(height: 12),
+                    ],
                   const SizedBox(height: 12),
                   InkWell(
                     onTap: () async {
@@ -535,46 +564,13 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                   ),
                   const SizedBox(height: 12),
                   if (selectedCategory == ExpenseCategory.stock) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryBlue.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline_rounded, size: 18),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              tr(ref, 'stock_refill_info'),
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                          Tooltip(
-                            message: tr(ref, 'projected_margin_help'),
-                            child: Icon(Icons.help_outline_rounded, color: AppTheme.slate500, size: 18),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
                     TextFormField(
                       controller: stockNameController,
                       decoration: InputDecoration(
                         labelText: tr(ref, 'product_names'),
-                        hintText: tr(ref, 'product_names_hint'),
                         border: const OutlineInputBorder(),
-                        helperText: tr(ref, 'product_names_helper'),
                       ),
-                      validator: (value) {
-                        if (selectedCategory == ExpenseCategory.stock &&
-                            (value == null || value.isEmpty)) {
-                          return tr(ref, 'required');
-                        }
-                        return null;
-                      },
+                      validator: (value) => (value == null || value.isEmpty) ? tr(ref, 'required') : null,
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -592,27 +588,22 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                                 child: Text(tr(ref, category)),
                               );
                             }).toList(),
-                            onChanged: (value) {
+                            onChanged: expense != null ? null : (value) {
                               if (value != null) {
                                 stockTypeController.text = value;
                                 setState(() {});
                               }
                             },
-                            validator: (value) {
-                              if (selectedCategory == ExpenseCategory.stock &&
-                                  (value == null || value.isEmpty)) {
-                                return tr(ref, 'required');
-                              }
-                              return null;
-                            },
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton.filled(
-                          onPressed: () => _addNewStockCategory(stockTypeController),
-                          icon: const Icon(Icons.add),
-                          style: IconButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
-                        ),
+                        if (expense == null) ...[
+                          const SizedBox(width: 8),
+                          IconButton.filled(
+                            onPressed: () => _addNewStockCategory(stockTypeController),
+                            icon: const Icon(Icons.add),
+                            style: IconButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -623,222 +614,69 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                         border: const OutlineInputBorder(),
                       ),
                       items: [
-                        DropdownMenuItem(
-                          value: 'second_hand',
-                          child: Text(tr(ref, 'second_hand')),
-                        ),
-                        DropdownMenuItem(
-                          value: 'new_condition',
-                          child: Text(tr(ref, 'new_condition')),
-                        ),
+                        DropdownMenuItem(value: 'second_hand', child: Text(tr(ref, 'second_hand'))),
+                        DropdownMenuItem(value: 'new_condition', child: Text(tr(ref, 'new_condition'))),
                       ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => selectedStockQuality = value);
-                        }
-                      },
+                      onChanged: expense != null ? null : (value) => setState(() => selectedStockQuality = value ?? 'second_hand'),
                     ),
                     const SizedBox(height: 12),
-                  ],
-                  if (selectedCategory == ExpenseCategory.stock) ...[
                     TextFormField(
                       controller: stockQuantityController,
-                      decoration: InputDecoration(
-                        labelText: tr(ref, 'stock_quantity'),
-                        border: const OutlineInputBorder(),
-                        suffixText: 'units',
-                      ),
+                      decoration: InputDecoration(labelText: tr(ref, 'stock_quantity'), border: const OutlineInputBorder()),
                       keyboardType: TextInputType.number,
+                      enabled: expense == null, // Lock quantity on edit
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       onChanged: (_) => setState(() {}),
-                      validator: (value) {
-                        if (selectedCategory == ExpenseCategory.stock &&
-                            (value == null || value.isEmpty)) {
-                          return tr(ref, 'required');
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.account_balance_wallet_outlined, size: 16),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              '${tr(ref, 'available_capital')}: ${CurrencyUtils.format(currentCapitalPool)}',
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                          Tooltip(
-                            message: tr(ref, 'capital_pool_help'),
-                            child: Icon(Icons.help_outline_rounded, color: AppTheme.slate500, size: 16),
-                          ),
-                        ],
-                      ),
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: stockPurchasePriceController,
-                      decoration: InputDecoration(
-                        labelText: tr(ref, 'purchase_price_unit'),
-                        border: const OutlineInputBorder(),
-                        suffixText: 'XAF',
-                      ),
+                      decoration: InputDecoration(labelText: tr(ref, 'purchase_price_unit'), border: const OutlineInputBorder()),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      enabled: expense == null, // Lock purchase price on edit
                       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
                       onChanged: (_) => setState(() {}),
-                      validator: (value) {
-                        if (selectedCategory == ExpenseCategory.stock &&
-                            (value == null || value.isEmpty)) {
-                          return tr(ref, 'required');
-                        }
-                        return null;
-                      },
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: stockResalePriceController,
-                      decoration: InputDecoration(
-                        labelText: tr(ref, 'resale_price_unit'),
-                        border: const OutlineInputBorder(),
-                        suffixText: 'XAF',
-                      ),
+                      decoration: InputDecoration(labelText: tr(ref, 'resale_price_unit'), border: const OutlineInputBorder()),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      enabled: expense == null, // Lock resale price on edit
                       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
                       onChanged: (_) => setState(() {}),
-                      validator: (value) {
-                        if (selectedCategory == ExpenseCategory.stock &&
-                            (value == null || value.isEmpty)) {
-                          return tr(ref, 'required');
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: projectedProfit >= 0
-                            ? Colors.green.withValues(alpha: 0.10)
-                            : Colors.red.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(projectedProfit >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded, size: 16),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              '${tr(ref, 'projected_profit')}: ${CurrencyUtils.format(projectedProfit)}',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: projectedProfit >= 0 ? Colors.green : Colors.red),
-                            ),
-                          ),
-                          Tooltip(
-                            message: tr(ref, 'projected_profit_help'),
-                            child: Icon(Icons.help_outline_rounded, color: AppTheme.slate500, size: 16),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: stockDescriptionController,
-                      decoration: InputDecoration(
-                        labelText: tr(ref, 'product_details_label'),
-                        border: const OutlineInputBorder(),
-                      ),
-                      maxLines: 2,
                     ),
                     const SizedBox(height: 16),
                     GestureDetector(
                       onTap: () => _pickImage(true, (path) => setState(() => stockImagePath = path)),
-                      child: Center(
-                        child: SmartImage(
-                          imagePath: stockImagePath,
-                          width: 320,
-                          height: 150,
-                          borderRadius: 12,
-                        ),
-                      ),
+                      child: Center(child: SmartImage(imagePath: stockImagePath, width: 320, height: 150, borderRadius: 12)),
                     ),
-                  ],
-                  if (selectedCategory != ExpenseCategory.stock) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.account_balance_wallet_outlined, size: 16),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              '${tr(ref, 'available_capital')}: ${CurrencyUtils.format(currentCapitalPool)}',
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                          Tooltip(
-                            message: tr(ref, 'available_capital'),
-                            child: Icon(Icons.help_outline_rounded, color: AppTheme.slate500, size: 16),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
+                  ] else ...[
                     TextFormField(
                       controller: descriptionController,
-                      decoration: InputDecoration(
-                        labelText: '${tr(ref, 'description')} *',
-                        border: const OutlineInputBorder(),
-                      ),
+                      decoration: InputDecoration(labelText: '${tr(ref, 'description')} *', border: const OutlineInputBorder()),
                       validator: (value) => value == null || value.isEmpty ? tr(ref, 'required') : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: amountController,
-                      decoration: InputDecoration(
-                        labelText: '${tr(ref, 'amount')} *',
-                        border: const OutlineInputBorder(),
-                        suffixText: 'XAF',
-                      ),
+                      decoration: InputDecoration(labelText: '${tr(ref, 'amount')} *', border: const OutlineInputBorder()),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      enabled: expense == null, // Lock amount on edit
                       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
                       validator: (value) => value == null || value.isEmpty ? tr(ref, 'required') : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: notesController,
-                      decoration: InputDecoration(
-                        labelText: tr(ref, 'notes'),
-                        border: const OutlineInputBorder(),
-                      ),
+                      decoration: InputDecoration(labelText: tr(ref, 'notes'), border: const OutlineInputBorder()),
                       maxLines: 2,
                     ),
                     const SizedBox(height: 16),
                     GestureDetector(
                       onTap: () => _pickImage(false, (path) => setState(() => receiptImagePath = path)),
-                      child: Center(
-                        child: SmartImage(
-                          imagePath: receiptImagePath,
-                          width: 320,
-                          height: 150,
-                          borderRadius: 12,
-                        ),
-                      ),
+                      child: Center(child: SmartImage(imagePath: receiptImagePath, width: 320, height: 150, borderRadius: 12)),
                     ),
-                    const SizedBox(height: 12),
                   ],
                 ],
               ),
@@ -848,91 +686,44 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
             if (_validationError != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _validationError!,
-                          style: const TextStyle(color: Colors.red, fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                child: Text(_validationError!, style: const TextStyle(color: Colors.red, fontSize: 13)),
               ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(tr(ref, 'cancel')),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(tr(ref, 'cancel'))),
             ElevatedButton(
               onPressed: isSaving ? null : () async {
                 if (formKey.currentState!.validate()) {
                   setState(() => isSaving = true);
                   try {
-                    final quantity = int.tryParse(stockQuantityController.text) ?? 0;
-                    final purchasePrice = double.tryParse(stockPurchasePriceController.text) ?? 0;
-                    final resalePrice = double.tryParse(stockResalePriceController.text) ?? 0;
-                    final computedStockAmount = quantity * purchasePrice;
                     final isStock = selectedCategory == ExpenseCategory.stock;
+                    final double amount = isStock 
+                        ? (int.tryParse(stockQuantityController.text) ?? 0) * (double.tryParse(stockPurchasePriceController.text) ?? 0)
+                        : (double.tryParse(amountController.text) ?? 0);
 
-                    // Validation: Stock expense must have profit
-                    if (isStock && resalePrice <= purchasePrice) {
-                      setState(() {
-                        _validationError = tr(ref, 'resale_price_error');
-                        isSaving = false;
-                      });
-                      return;
+                    if (amount > currentCapitalPool && selectedCategory != ExpenseCategory.capitalInjection) {
+                       setState(() {
+                         _validationError = '${tr(ref, 'insufficient_capital')}: ${CurrencyUtils.format(currentCapitalPool)}';
+                         isSaving = false;
+                       });
+                       return;
                     }
 
-                    // Validation: Expense amount must not exceed available capital (uses capital now, not profit)
-                    if (!isStock) {
-                      final expenseAmount = double.tryParse(amountController.text) ?? 0;
-                      
-                      if (expenseAmount > currentCapitalPool) {
-                        setState(() {
-                          _validationError = '${tr(ref, 'insufficient_capital')}: ${CurrencyUtils.format(currentCapitalPool)}';
-                          isSaving = false;
-                        });
-                        return;
-                      }
-                    }
-
-                    // Validation: Stock refill must have sufficient capital
-                    if (isStock) {
-                      final names = stockNameController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-                      final totalStockAmount = computedStockAmount * names.length;
-                      if (totalStockAmount > currentCapitalPool) {
-                        setState(() {
-                          _validationError = '${tr(ref, 'insufficient_capital')}: ${tr(ref, 'all')} ${CurrencyUtils.format(currentCapitalPool)}';
-                          isSaving = false;
-                        });
-                        return;
-                      }
-                    }
-
-                    if (isStock) {
+                    if (expense == null && isStock) {
                       final names = stockNameController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
                       for (var name in names) {
+                        // Un-snake name for better display
+                        final formattedName = name.replaceAll('_', ' ');
+                        
                         final newExpense = Expense()
-                          ..description = 'Stock purchase: $name'
-                          ..amount = computedStockAmount
+                          ..description = 'Stock purchase: $formattedName'
+                          ..amount = amount
                           ..category = selectedCategory
                           ..notes = stockDescriptionController.text
                           ..receiptImagePath = receiptImagePath
-                          ..stockProductName = name
+                          ..stockProductName = formattedName
                           ..stockProductType = stockTypeController.text
-                          ..stockQuantity = quantity
-                          ..stockPurchasePrice = purchasePrice
-                          ..stockResalePrice = resalePrice
+                          ..stockQuantity = int.tryParse(stockQuantityController.text)
+                          ..stockPurchasePrice = double.tryParse(stockPurchasePriceController.text)
+                          ..stockResalePrice = double.tryParse(stockResalePriceController.text)
                           ..stockQuality = selectedStockQuality
                           ..stockImagePath = stockImagePath
                           ..expenseDate = selectedDate
@@ -943,36 +734,47 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                       // Refresh product catalog after adding stock
                       await ref.read(productProvider.notifier).loadProducts();
                     } else {
-                      final newExpense = Expense()
-                        ..description = descriptionController.text
-                        ..amount = double.tryParse(amountController.text) ?? 0
-                        ..category = selectedCategory
-                        ..notes = notesController.text
-                        ..receiptImagePath = receiptImagePath
-                        ..expenseDate = selectedDate
-                        ..operationId = const Uuid().v4();
+                      final newExpense = expense != null ? Expense.fromJson(expense.toJson()) : Expense();
+                      newExpense.expenseDate = selectedDate;
+                      newExpense.category = selectedCategory;
+                      newExpense.amount = amount;
+                      
+                      if (isStock) {
+                        final name = stockNameController.text;
+                        final formattedName = name.replaceAll('_', ' ');
+                        
+                        newExpense.description = 'Stock purchase: $formattedName';
+                        newExpense.stockProductName = formattedName;
+                        newExpense.stockProductType = stockTypeController.text;
+                        newExpense.stockQuantity = int.tryParse(stockQuantityController.text);
+                        newExpense.stockPurchasePrice = double.tryParse(stockPurchasePriceController.text);
+                        newExpense.stockResalePrice = double.tryParse(stockResalePriceController.text);
+                        newExpense.stockQuality = selectedStockQuality;
+                        newExpense.stockImagePath = stockImagePath;
+                        newExpense.notes = stockDescriptionController.text;
+                      } else {
+                        newExpense.description = descriptionController.text;
+                        newExpense.notes = notesController.text;
+                        newExpense.receiptImagePath = receiptImagePath;
+                      }
 
-                      await ref.read(expenseProvider.notifier).addExpense(newExpense);
+                      if (expense != null) {
+                        await ref.read(expenseProvider.notifier).updateExpense(newExpense);
+                      } else {
+                        await ref.read(expenseProvider.notifier).addExpense(newExpense);
+                      }
                     }
 
                     if (!context.mounted) return;
                     Navigator.pop(context);
                   } catch (e) {
-                    setState(() {
-                      _validationError = e.toString();
-                      isSaving = false;
-                    });
+                    setState(() { _validationError = e.toString(); isSaving = false; });
                   }
                 }
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryBlue, 
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.6),
-              ),
               child: isSaving 
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : Text(tr(ref, 'add')),
+                : Text(expense == null ? tr(ref, 'add') : tr(ref, 'save')),
             ),
           ],
         );

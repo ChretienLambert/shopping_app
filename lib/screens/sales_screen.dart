@@ -28,6 +28,8 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
   @override
   Widget build(BuildContext context) {
     final sales = ref.watch(saleProvider);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bool isMobile = screenWidth < 700;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -59,11 +61,11 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
               ),
             )
           : ListView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(isMobile ? 12 : 16),
               itemCount: sales.length,
               itemBuilder: (context, index) {
                 final sale = sales[index];
-                return _buildSaleCard(sale);
+                return _buildSaleCard(sale, isMobile);
               },
             ),
       floatingActionButton: FloatingActionButton(
@@ -73,46 +75,64 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     );
   }
 
-  Widget _buildSaleCard(Sale sale) {
+  Widget _buildSaleCard(Sale sale, bool isMobile) {
     return FutureBuilder<Customer?>(
       future: sale.customerId != '0' ? ref.read(customerProvider.notifier).getCustomerById(sale.customerId) : Future.value(null),
       builder: (context, snapshot) {
         final customer = snapshot.data;
         return Card(
-          elevation: 2,
-          margin: const EdgeInsets.only(bottom: 12),
+          elevation: 0,
+          margin: const EdgeInsets.only(bottom: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: AppTheme.slate200),
+          ),
           child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.1),
+            contentPadding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: 4),
+            leading: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
               child: Icon(
                 sale.isDelivery ? Icons.local_shipping_rounded : Icons.sell_rounded,
                 color: AppTheme.primaryBlue,
+                size: 20,
               ),
             ),
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            title: Row(
               children: [
-                Text(
-                  CurrencyUtils.format(sale.totalAmount),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
+                Expanded(
+                  child: Text(
+                    CurrencyUtils.format(sale.totalAmount),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: isMobile ? 16 : 18,
+                    ),
                   ),
                 ),
-                Text(
-                  sale.operationId,
-                  style: TextStyle(color: AppTheme.slate400, fontSize: 11),
-                ),
+                _buildStatusBadge(sale),
               ],
             ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const SizedBox(height: 2),
                 Row(
                   children: [
-                    Icon(Icons.calendar_today_rounded, size: 12, color: AppTheme.slate500),
+                    Icon(Icons.calendar_today_rounded, size: 10, color: AppTheme.slate500),
                     const SizedBox(width: 4),
-                    Text('${_formatDate(sale.saleDate)} • ${_formatTime(sale.saleDate)}', style: TextStyle(color: AppTheme.slate500)),
+                    Text(
+                      '${_formatDate(sale.saleDate)} • ${_formatTime(sale.saleDate)}',
+                      style: TextStyle(color: AppTheme.slate500, fontSize: 11),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      sale.operationId,
+                      style: TextStyle(color: AppTheme.slate400, fontSize: 10),
+                    ),
                   ],
                 ),
                 if (customer != null)
@@ -120,48 +140,18 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                     padding: const EdgeInsets.only(top: 4),
                     child: Row(
                       children: [
-                        Icon(Icons.person_outline_rounded, size: 12, color: AppTheme.slate500),
+                        Icon(Icons.person_outline_rounded, size: 11, color: AppTheme.slate500),
                         const SizedBox(width: 4),
-                        Text(customer.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                  ),
-                if (sale.isDelivery && sale.deliveryAddress != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      children: [
-                        Icon(Icons.location_on_outlined, size: 12, color: AppTheme.slate500),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            sale.deliveryAddress!,
-                            style: TextStyle(color: AppTheme.slate500, fontSize: 11),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                        Text(
+                          customer.name,
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Theme.of(context).colorScheme.onSurface),
                         ),
                       ],
                     ),
                   ),
               ],
             ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (sale.isDelivery && sale.lifecycleStatus == SaleLifecycleStatus.pending)
-                  IconButton(
-                    icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.green),
-                    tooltip: 'Confirm Paid',
-                    onPressed: () async {
-                      sale.lifecycleStatus = SaleLifecycleStatus.completed;
-                      sale.isPaid = true;
-                      await ref.read(saleProvider.notifier).updateSale(sale);
-                    },
-                  ),
-                Icon(Icons.chevron_right_rounded, color: AppTheme.slate300),
-              ],
-            ),
+            trailing: Icon(Icons.chevron_right_rounded, color: AppTheme.slate300),
             onTap: () => _showSaleDetailsDialog(sale),
           ),
         );
@@ -243,6 +233,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     double discountPercent = 0;
     final notesController = TextEditingController();
     final deliveryAddressController = TextEditingController();
+    DateTime selectedDate = DateTime.now();
     String searchQuery = '';
     bool isSaving = false;
 
@@ -288,6 +279,30 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: () async {
+                      final DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (picked != null && picked != selectedDate) {
+                        setState(() => selectedDate = picked);
+                      }
+                    },
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: tr(ref, 'sale_date'),
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.calendar_today),
+                      ),
+                      child: Text(
+                        _formatDate(selectedDate),
+                      ),
+                    ),
+                  ),
                   if (selectedCustomer != null) ...[
                     const SizedBox(height: 8),
                     Builder(
@@ -296,25 +311,37 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                           selectedCustomer!.id,
                           existingSales,
                         );
-                        if (!(stats['isRegular'] as bool)) {
+                        final double totalSpent = stats['totalSpent'] as double;
+                        if (totalSpent < 10000) {
                           return const SizedBox.shrink();
                         }
                         return Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(8),
+                            color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.2)),
                           ),
-                          child: Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.loyalty_rounded, size: 16),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  '${tr(ref, 'regular_client')} (${stats['completedSales']} ${tr(ref, 'purchases')})',
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.green),
-                                ),
+                              Row(
+                                children: [
+                                  const Icon(Icons.info_outline, size: 16, color: AppTheme.primaryBlue),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'this client has made ${CurrencyUtils.format(totalSpent)} as purchase',
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'do you want to give him a little discount?',
+                                style: TextStyle(fontSize: 11),
                               ),
                             ],
                           ),
@@ -586,6 +613,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                   final sale = Sale()
                     ..customerId = selectedCustomer!.id
                     ..totalAmount = finalTotal
+                    ..saleDate = selectedDate
                     ..notes = notesController.text
                     ..isDelivery = isDelivery
                     ..deliveryAddress = deliveryAddressController.text

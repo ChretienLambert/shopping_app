@@ -1,22 +1,28 @@
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:io';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../repositories/customer_repository.dart';
 import '../repositories/product_repository.dart';
 import '../repositories/sale_repository.dart';
 import '../repositories/expense_repository.dart';
 import '../repositories/weekly_checkup_repository.dart';
+import '../providers/customer_provider.dart';
+import '../providers/product_provider.dart';
+import '../providers/sale_provider.dart';
+import '../providers/expense_provider.dart';
 import '../services/hive_service.dart';
 import 'app_config.dart';
 import 'logging_service.dart';
 
 class SyncManager {
-  SyncManager(this._config) {
+  SyncManager(this._config, this._ref) {
     _init();
   }
 
   final AppConfig _config;
+  final Ref _ref;
   final _connectivity = Connectivity();
   
   final _customerRepo = CustomerRepository();
@@ -27,9 +33,23 @@ class SyncManager {
   bool _isOnline = false;
   bool _isSyncInProgress = false;
   String? _lastError;
+  Timer? _periodicSyncTimer;
 
   void _init() async {
-    // Real-time sync intentionally disabled.
+    // Start periodic background sync every 3 minutes for workstation parity
+    _periodicSyncTimer = Timer.periodic(const Duration(minutes: 3), (_) {
+      if (!_isSyncInProgress) {
+        syncAll();
+      }
+    });
+  }
+
+  void refreshAppProviders() {
+    _ref.invalidate(customerProvider);
+    _ref.invalidate(productProvider);
+    _ref.invalidate(saleProvider);
+    _ref.invalidate(expenseProvider);
+    logger.info('App providers refreshed after sync.');
   }
 
   SupabaseClient? get _supabase {
@@ -83,8 +103,8 @@ class SyncManager {
       if (client == null) {
         return 'Supabase client is unavailable.';
       }
-      // Smallest possible query to verify table existence and credentials
-      await client.from('products').select('id').limit(1);
+      // Added timeout to prevent hanging on flaky connections
+      await client.from('products').select('id').limit(1).timeout(const Duration(seconds: 10));
       _lastError = null;
       return null;
     } catch (e) {
@@ -136,6 +156,7 @@ class SyncManager {
       // Save sync timestamp
       await settings.put('last_synced_at', syncStartedAt.toIso8601String());
 
+      refreshAppProviders();
       logger.info('Sync process completed.');
       _lastError = null;
     } catch (e) {
@@ -179,6 +200,8 @@ class SyncManager {
       await _saleRepo.pullAll();
       await _expenseRepo.pullAll();
       await _weeklyRepo.pullAll();
+      
+      refreshAppProviders();
       logger.info('✅ Initial Pull Completed.');
       _lastError = null;
     } catch (e) {
@@ -221,9 +244,36 @@ class SyncManager {
     }
   }
 
+  Future<void> pullAll() async {
+    final client = _supabase;
+    await _updateOnlineStatus();
+    if (!_isOnline || client?.auth.currentUser == null) {
+      logger.info('Pull skipped: Offline or not logged in.');
+      return;
+    }
+
+    logger.info('Pull remote changes from cloud (Full scan)...');
+    try {
+      // We pull everything to ensure local is up to date with DB "Source of Truth"
+      await _customerRepo.pullAll();
+      await _productRepo.pullAll();
+      await _saleRepo.pullAll();
+      await _expenseRepo.pullAll();
+      await _weeklyRepo.pullAll();
+
+      refreshAppProviders();
+      logger.info('Pull completed.');
+      _lastError = null;
+    } catch (e) {
+      _lastError = e.toString();
+      logger.error('Pull failed', e);
+    }
+  }
+
   bool get isOnline => _isOnline;
   String? get lastError => _lastError;
 
   void dispose() {
+    _periodicSyncTimer?.cancel();
   }
 }

@@ -98,6 +98,16 @@ class AppTheme {
 
   static const String _fontFamily = 'Inter'; // Prefer Inter if available, defaults gracefully
 
+  static PageTransitionsTheme _buildPageTransitions() {
+    return const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+      },
+    );
+  }
+
   static TextTheme _buildTextTheme(Color baseColor, Color mutedColor) {
     return TextTheme(
       displayLarge: TextStyle(color: baseColor, fontSize: 57, fontWeight: FontWeight.normal, fontFamily: _fontFamily),
@@ -123,6 +133,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       fontFamily: _fontFamily,
+      pageTransitionsTheme: _buildPageTransitions(),
       colorScheme: ColorScheme.fromSeed(
         seedColor: primaryBlue,
         brightness: Brightness.light,
@@ -141,10 +152,28 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: Colors.white,
         elevation: 0,
-        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radius),
-          side: const BorderSide(color: border, width: 1),
+          borderRadius: BorderRadius.circular(radiusLg),
+          side: const BorderSide(color: border, width: 0.8),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusMd)),
+          backgroundColor: primaryBlue,
+          foregroundColor: Colors.white,
+          textStyle: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusMd)),
+          side: const BorderSide(color: border),
+          textStyle: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
       appBarTheme: const AppBarTheme(
@@ -247,6 +276,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       fontFamily: _fontFamily,
+      pageTransitionsTheme: _buildPageTransitions(),
       colorScheme: ColorScheme.fromSeed(
         seedColor: primaryBlue,
         brightness: Brightness.dark,
@@ -265,10 +295,28 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: darkCard,
         elevation: 0,
-        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radius),
-          side: const BorderSide(color: darkBorder, width: 1),
+          borderRadius: BorderRadius.circular(radiusLg),
+          side: const BorderSide(color: darkBorder, width: 0.8),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusMd)),
+          backgroundColor: primaryBlue,
+          foregroundColor: Colors.white,
+          textStyle: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusMd)),
+          side: const BorderSide(color: darkBorder),
+          textStyle: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
       appBarTheme: const AppBarTheme(

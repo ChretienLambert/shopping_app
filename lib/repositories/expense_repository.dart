@@ -20,28 +20,31 @@ class ExpenseRepository {
 
   Future<void> save(Expense expense) async {
     final box = _hive.expensesBox;
+    final Map? existingData = box.get(expense.id);
+    Expense? previousVersion;
+    if (existingData != null) {
+      previousVersion = Expense.fromJson(existingData);
+    }
+    
     expense.isDirty = true;
     expense.updatedAt = DateTime.now();
     
     await box.put(expense.id, expense.toJson());
     
     if (expense.category == ExpenseCategory.stock && expense.deletedAt == null) {
-      await _processStockItem(expense);
+      await _processStockUpdate(expense, previousVersion);
     }
-
-    // Auto-sync disabled as per request
-    // if (_supabase.auth.currentUser != null) {
-    //   await syncOne(expense);
-    // }
   }
 
-  Future<void> _processStockItem(Expense item) async {
+  Future<void> _processStockUpdate(Expense current, Expense? previous) async {
     try {
       final pRepo = HiveService.instance.getBox('products');
-      // Look for existing product by type (category) and name
-      // Normalize comparison
-      final itemName = item.stockProductName?.trim().toLowerCase();
-      final itemType = item.stockProductType?.trim().toLowerCase();
+      
+      // If previous version exists and name/type changed, we might have a problem.
+      // But typically user edits same product.
+      
+      final itemName = current.stockProductName?.trim().toLowerCase();
+      final itemType = current.stockProductType?.trim().toLowerCase();
 
       final existingEntry = pRepo.values.cast<Map<dynamic, dynamic>>().where(
         (p) {
@@ -52,36 +55,43 @@ class ExpenseRepository {
       ).firstOrNull;
 
       if (existingEntry != null) {
-        // Update stock
         final p = Map<String, dynamic>.from(existingEntry);
-        p['stockQuantity'] = (p['stockQuantity'] ?? 0) + (item.stockQuantity ?? 0);
         
-        p['updatedAt'] = DateTime.now().toIso8601String();
-        p['isDirty'] = true;
-        await pRepo.put(p['id'], p);
-        logger.info('Updated existing product stock: ${item.stockProductName}');
-      } else {
-        // Create new product (Using raw UUID for Supabase compatibility)
+        int currentQty = current.stockQuantity ?? 0;
+        int previousQty = previous?.stockQuantity ?? 0;
+        int delta = currentQty - previousQty;
+
+        if (delta != 0 || current.stockImagePath != previous?.stockImagePath || current.stockResalePrice != previous?.stockResalePrice) {
+          p['stockQuantity'] = (p['stockQuantity'] ?? 0) + delta;
+          p['imagePath'] = current.stockImagePath;
+          p['price'] = current.stockResalePrice ?? p['price'];
+          p['updatedAt'] = DateTime.now().toIso8601String();
+          p['isDirty'] = true;
+          await pRepo.put(p['id'], p);
+          logger.info('Updated product stock delta: $delta for ${current.stockProductName}');
+        }
+      } else if (previous == null) {
+        // Only create new if it's actually a new expense
         final newId = const Uuid().v4();
         final newProduct = {
           'id': newId,
-          'name': item.stockProductName ?? 'New Stock',
-          'productType': item.stockProductType,
-          'quality': item.stockQuality,
-          'description': item.notes ?? '',
-          'stockQuantity': item.stockQuantity ?? 0,
-          'purchasePrice': item.stockPurchasePrice ?? 0.0,
-          'price': item.stockResalePrice ?? 0.0,
-          'imagePath': item.stockImagePath,
+          'name': current.stockProductName ?? 'New Stock',
+          'productType': current.stockProductType,
+          'quality': current.stockQuality,
+          'description': current.notes ?? '',
+          'stockQuantity': current.stockQuantity ?? 0,
+          'purchasePrice': current.stockPurchasePrice ?? 0.0,
+          'price': current.stockResalePrice ?? 0.0,
+          'imagePath': current.stockImagePath,
           'createdAt': DateTime.now().toIso8601String(),
           'updatedAt': DateTime.now().toIso8601String(),
           'isDirty': true,
         };
         await pRepo.put(newId, newProduct);
-        logger.info('Created new product from stock: ${item.stockProductName}');
+        logger.info('Created new product from stock: ${current.stockProductName}');
       }
     } catch (e) {
-      logger.warning('Failed to process stock item: $e');
+      logger.warning('Failed to process stock update: $e');
     }
   }
 
@@ -223,8 +233,8 @@ class ExpenseRepository {
       }
 
       final response = await query;
-      
       final List<dynamic> remoteData = response;
+      logger.info('Fetched ${remoteData.length} expenses from Supabase');
       
       for (var data in remoteData) {
         final String? sId = data['server_id'];
@@ -238,10 +248,6 @@ class ExpenseRepository {
 
         if (existingJson != null) {
           final existing = Expense.fromJson(existingJson);
-          if (existing.isDirty) {
-            logger.info('Skipping pull for dirty expense: ${existing.description}');
-            continue;
-          }
           final remoteUpdatedAt = DateTime.parse(data['updated_at']);
           if (!remoteUpdatedAt.isAfter(existing.updatedAt)) {
             continue;

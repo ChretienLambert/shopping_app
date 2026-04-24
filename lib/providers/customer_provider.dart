@@ -11,6 +11,7 @@ class CustomerNotifier extends StateNotifier<List<Customer>> {
 
   Future<void> loadCustomers() async {
     final customers = await _repository.getAll();
+    if (!mounted) return;
     state = customers;
   }
 

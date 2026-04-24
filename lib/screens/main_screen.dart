@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/sync_provider.dart';
+import '../services/logging_service.dart';
 import '../utils/app_localization.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sidebar.dart';
@@ -23,7 +24,7 @@ class MainScreen extends ConsumerStatefulWidget {
   ConsumerState<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends ConsumerState<MainScreen> {
+class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   bool _isOnline = true;
   bool _initialSyncChecked = false;
@@ -32,7 +33,22 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _performConnectionCheck();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // When workstation is focused/resumed, trigger a background sync to get remote changes
+    if (state == AppLifecycleState.resumed) {
+      ref.read(syncManagerProvider).syncAll();
+    }
   }
 
   Future<void> _performConnectionCheck() async {
@@ -116,17 +132,58 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           child: CircularProgressIndicator(),
         ),
       ),
-      error: (error, stack) => Scaffold(
-        body: Center(
-          child: Text('${tr(ref, 'error')}: $error'),
-        ),
-      ),
+      error: (error, stack) {
+        // Fallback to local session if available even on auth error
+        final cachedSession = ref.read(authServiceProvider).currentAppSession;
+        if (cachedSession != null) {
+          logger.warning('Auth error detected, but using cached session: $error');
+          return _buildMainLayout(context);
+        }
+
+        return Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.cloud_off, size: 64, color: Colors.orange),
+                  const SizedBox(height: 16),
+                  Text(
+                    tr(ref, 'connection_error'),
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error.toString().contains('SocketException') || error.toString().contains('host lookup')
+                        ? tr(ref, 'offline_auth_error')
+                        : error.toString(),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => ref.invalidate(appSessionProvider),
+                    child: Text(tr(ref, 'retry')),
+                  ),
+                  TextButton(
+                    onPressed: () => ref.read(authServiceProvider).signInAsGuest(),
+                    child: Text(tr(ref, 'continue_offline')),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildMainLayout(BuildContext context) {
     final themeMode = ref.watch(themeProvider);
     final isDarkMode = themeMode == ThemeMode.dark;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bool isMobile = screenWidth < 700;
+
     final screenTitles = [
       tr(ref, 'dashboard'),
       tr(ref, 'catalogs'),
@@ -134,6 +191,15 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       tr(ref, 'sales'),
       tr(ref, 'expenses'),
       tr(ref, 'finance'),
+    ];
+
+    final navItems = [
+      (icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard, label: tr(ref, 'dashboard')),
+      (icon: Icons.inventory_2_outlined, selectedIcon: Icons.inventory_2, label: tr(ref, 'catalogs')),
+      (icon: Icons.people_outline, selectedIcon: Icons.people, label: tr(ref, 'customers')),
+      (icon: Icons.shopping_cart_outlined, selectedIcon: Icons.shopping_cart, label: tr(ref, 'sales')),
+      (icon: Icons.receipt_long_outlined, selectedIcon: Icons.receipt_long, label: tr(ref, 'expenses')),
+      (icon: Icons.account_balance_outlined, selectedIcon: Icons.account_balance, label: tr(ref, 'finance')),
     ];
 
     return PopScope(
@@ -148,169 +214,198 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         }
       },
       child: Scaffold(
+        key: GlobalKey<ScaffoldState>(),
         backgroundColor: Theme.of(context).colorScheme.surface,
+        bottomNavigationBar: isMobile
+            ? NavigationBar(
+                height: 64, // Slightly shorter for mobile
+                selectedIndex: _selectedIndex,
+                onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+                labelBehavior: screenWidth < 380 ? NavigationDestinationLabelBehavior.alwaysHide : NavigationDestinationLabelBehavior.alwaysShow,
+                destinations: navItems
+                    .map((item) => NavigationDestination(
+                          icon: Icon(item.icon, size: 22),
+                          selectedIcon: Icon(item.selectedIcon, size: 22),
+                          label: item.label,
+                        ))
+                    .toList(),
+              )
+            : null,
         body: Row(
           children: [
-            Sidebar(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (index) {
-                if (index == 6) { 
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
-                  return;
-                }
-                setState(() {
-                  _selectedIndex = index;
-                });
-              },
-              isDarkMode: isDarkMode,
-              onThemeToggle: (value) {
-                ref.read(themeProvider.notifier).setThemeMode(
-                  value ? ThemeMode.dark : ThemeMode.light,
-                );
-              },
-            ),
+            if (!isMobile)
+              Sidebar(
+                selectedIndex: _selectedIndex,
+                onDestinationSelected: (index) {
+                  if (index == 6) {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                    return;
+                  }
+                  setState(() {
+                    _selectedIndex = index;
+                  });
+                },
+                isDarkMode: isDarkMode,
+                onThemeToggle: (value) {
+                  ref.read(themeProvider.notifier).setThemeMode(
+                        value ? ThemeMode.dark : ThemeMode.light,
+                      );
+                },
+              ),
             Expanded(
               child: Column(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: Theme.of(context).colorScheme.outline,
-                          width: 1,
+                  Builder(builder: (context) {
+                    return Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isMobile ? 12 : 24,
+                        vertical: isMobile ? 10 : 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        border: Border(
+                          bottom: BorderSide(
+                            color: Theme.of(context).colorScheme.outline,
+                            width: 1,
+                          ),
                         ),
                       ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      screenTitles[_selectedIndex],
-                                      style: TextStyle(
-                                        color: Theme.of(context).colorScheme.onSurface,
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Flexible(
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: (_isOnline ? Colors.green : Colors.amber).withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: (_isOnline ? Colors.green : Colors.amber).withValues(alpha: 0.3),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            _isOnline ? Icons.cloud_done : Icons.cloud_off,
-                                            size: 14,
-                                            color: _isOnline ? Colors.green : Colors.amber,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Flexible(
-                                            child: Text(
-                                              _isOnline ? tr(ref, 'online') : tr(ref, 'offline_mode'),
-                                              style: TextStyle(
-                                                color: _isOnline ? Colors.green : Colors.amber,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Text(
-                                tr(ref, 'manage_business_data'),
-                                style: TextStyle(
-                                  color: Theme.of(context).textTheme.bodySmall?.color,
-                                  fontSize: 14,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.refresh_rounded, size: 16),
-                          onPressed: () => _performConnectionCheck(),
-                          tooltip: tr(ref, 'ping_connection'),
-                          visualDensity: VisualDensity.compact,
-                          color: AppTheme.slate400,
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          decoration: BoxDecoration(
-                            gradient: AppTheme.primaryGradient,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppTheme.primaryBlue.withValues(alpha: 0.3),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              )
-                            ],
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                child: Row(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
                                   children: [
-                                    const Icon(Icons.settings_rounded, color: Colors.white, size: 20),
-                                    const SizedBox(width: 8),
-                                    FittedBox(
-                                      fit: BoxFit.scaleDown,
+                                    Flexible(
                                       child: Text(
-                                        tr(ref, 'settings'),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w600,
+                                        screenTitles[_selectedIndex],
+                                        style: TextStyle(
+                                          color: Theme.of(context).colorScheme.onSurface,
+                                          fontSize: isMobile ? (screenWidth < 350 ? 16 : 18) : 24,
+                                          fontWeight: FontWeight.bold,
                                         ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
+                                    const SizedBox(width: 8),
+                                    _buildConnectionBadge(isMobile),
                                   ],
                                 ),
-                              ),
+                                if (!isMobile)
+                                  Text(
+                                    tr(ref, 'manage_business_data'),
+                                    style: TextStyle(
+                                      color: Theme.of(context).textTheme.bodySmall?.color,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
+                          if (isMobile) 
+                            IconButton(
+                              icon: const Icon(Icons.settings_outlined, size: 22),
+                              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+                            )
+                          else ...[
+                            IconButton(
+                              icon: const Icon(Icons.refresh_rounded, size: 16),
+                              onPressed: () => _performConnectionCheck(),
+                              tooltip: tr(ref, 'ping_connection'),
+                              color: AppTheme.slate400,
+                            ),
+                            const SizedBox(width: 8),
+                            _buildSettingsButton(context),
+                          ],
+                        ],
+                      ),
+                    );
+                  }),
                   Expanded(
-                    child: ClipRRect(
-                      child: _screens[_selectedIndex],
-                    ),
+                    child: _screens[_selectedIndex],
                   ),
                 ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConnectionBadge(bool isMobile) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bool isSmallMobile = screenWidth < 350;
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: isSmallMobile ? 4 : 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: (_isOnline ? Colors.green : Colors.amber).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: (_isOnline ? Colors.green : Colors.amber).withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _isOnline ? Icons.cloud_done : Icons.cloud_off,
+            size: isSmallMobile ? 10 : 12,
+            color: _isOnline ? Colors.green : Colors.amber,
+          ),
+          if (!isMobile) ...[
+            const SizedBox(width: 4),
+            Text(
+              _isOnline ? tr(ref, 'online') : tr(ref, 'offline_mode'),
+              style: TextStyle(
+                color: _isOnline ? Colors.green : Colors.amber,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsButton(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: AppTheme.primaryGradient,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryBlue.withValues(alpha: 0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                const Icon(Icons.settings_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  tr(ref, 'settings'),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

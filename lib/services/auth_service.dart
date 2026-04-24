@@ -51,6 +51,10 @@ class AuthService {
         authenticatedAt: DateTime.now(),
       );
       await _persistSession(session);
+    }, onError: (error, stack) {
+      logger.warning('Supabase auth state stream error: $error');
+      // We do not want to propagate this error to our session stream
+      // if we already have a session, to keep the app working offline.
     });
   }
 

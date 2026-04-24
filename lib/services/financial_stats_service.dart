@@ -116,8 +116,9 @@ class FinancialStatsService {
     final recoveredFromSales =
         stockDeployed <= 0 ? 0.0 : min(revenue, stockDeployed);
     final remainingToRecover = max(0.0, stockDeployed - recoveredFromSales);
-    final realizedProfit = revenue - stockDeployed - businessCost;
-    final availableProfit = realizedProfit - payout;
+    // Realized Profit is now Gross Profit (Revenue - Stock Cost)
+    final realizedProfit = revenue - stockDeployed;
+    final availableProfit = realizedProfit - businessCost - payout;
     final coverage = stockDeployed <= 0
         ? 1.0
         : (recoveredFromSales / stockDeployed).clamp(0, 1).toDouble();

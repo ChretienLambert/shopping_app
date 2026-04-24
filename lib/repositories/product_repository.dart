@@ -127,6 +127,7 @@ class ProductRepository {
       
       final response = await query;
       final List<dynamic> remoteData = response;
+      logger.info('Fetched ${remoteData.length} products from Supabase');
       
       for (var data in remoteData) {
         final String? sId = data['server_id'];
@@ -140,11 +141,8 @@ class ProductRepository {
 
         if (existingJson != null) {
           final existing = Product.fromJson(existingJson);
-          if (existing.isDirty) {
-            logger.info('Skipping pull for dirty product: ${existing.name}');
-            continue;
-          }
           final remoteUpdatedAt = DateTime.parse(data['updated_at']);
+
           if (!remoteUpdatedAt.isAfter(existing.updatedAt)) {
             continue;
           }

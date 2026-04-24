@@ -11,6 +11,7 @@ class ProductNotifier extends StateNotifier<List<Product>> {
 
   Future<void> loadProducts() async {
     final products = await _repository.getAll();
+    if (!mounted) return;
     state = products;
   }
 

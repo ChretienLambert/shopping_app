@@ -14,6 +14,7 @@ import 'theme/app_theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/language_provider.dart';
+import 'providers/sync_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -115,10 +116,25 @@ class _AppBootstrapState extends State<_AppBootstrap> {
 
   Future<void> _loadSetupState() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _setupCompleted = prefs.getBool(_setupCompletedKey) ?? false;
-      _loading = false;
-    });
+    final completed = prefs.getBool(_setupCompletedKey) ?? false;
+    
+    if (mounted) {
+      setState(() {
+        _setupCompleted = completed;
+        _loading = false;
+      });
+    }
+
+    // Perform background sync on app open if setup is done
+    if (completed) {
+      // Use microtask or future.delayed to ensure ProviderScope is ready
+      Future.microtask(() {
+        if (mounted) {
+           final container = ProviderScope.containerOf(context);
+           container.read(syncManagerProvider).syncAll();
+        }
+      });
+    }
   }
 
   @override

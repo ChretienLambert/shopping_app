@@ -10,6 +10,7 @@ class Sidebar extends ConsumerWidget {
   final Function(int) onDestinationSelected;
   final bool isDarkMode;
   final Function(bool) onThemeToggle;
+  final bool isDrawer;
 
   const Sidebar({
     super.key,
@@ -17,15 +18,17 @@ class Sidebar extends ConsumerWidget {
     required this.onDestinationSelected,
     required this.isDarkMode,
     required this.onThemeToggle,
+    this.isDrawer = false,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isSmallScreen = MediaQuery.of(context).size.width < 768;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bool isSmallScreen = screenWidth < 768 && !isDrawer;
     final user = ref.watch(currentUserProvider);
     
     return Container(
-      width: isSmallScreen ? 80 : 256,
+      width: isDrawer ? double.infinity : (isSmallScreen ? 80 : 256),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         border: Border(
@@ -204,7 +207,7 @@ class Sidebar extends ConsumerWidget {
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
-                if (!isSmallScreen) ...[
+                if (!isSmallScreen || isDrawer) ...[
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

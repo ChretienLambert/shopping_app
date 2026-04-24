@@ -71,13 +71,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
 
             // Data Management Section
             _buildSectionHeader(tr(ref, 'cloud_sync_data')),
-            _buildSettingTile(
-              icon: Icons.cloud_sync_rounded,
-              title: tr(ref, 'manual_data_sync'),
-              subtitle: tr(ref, 'manual_sync_subtitle'),
-              onTap: () => _handleManualSync(context, ref),
-              trailing: const Icon(Icons.sync, size: 20),
-            ),
+            _buildSyncControls(),
+            const SizedBox(height: 16),
             _buildSettingTile(
               icon: Icons.network_check_rounded,
               title: tr(ref, 'check_db_connection'),
@@ -93,15 +88,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
               subtitle: tr(ref, 'export_all_subtitle'),
               onTap: () => _exportAllData(context, ref),
             ),
-            _buildSettingTile(
-              icon: Icons.table_view_rounded,
-              title: tr(ref, 'inventory_export_csv'),
-              subtitle: tr(ref, 'inventory_export_subtitle'),
-              onTap: () => _exportProductsCsv(context, ref),
-            ),
             const SizedBox(height: 32),
 
-            _buildSectionHeader(tr(ref, 'diagnostics_support')),
+            // App Settings Section
+            _buildSectionHeader(tr(ref, 'app_settings')),
+            _buildLanguageTile(),
+            _buildThemeTile(isDarkMode),
+            const SizedBox(height: 32),
+
+            _buildSectionHeader(tr(ref, 'maintenance')),
             _buildSettingTile(
               icon: Icons.bug_report_rounded,
               title: tr(ref, 'share_error_logs'),
@@ -116,12 +111,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
               onTap: () => _confirmSystemReset(context, ref),
               destructive: true,
             ),
-            const SizedBox(height: 32),
-
-            // App Settings Section
-            _buildSectionHeader(tr(ref, 'app_settings')),
-            _buildLanguageTile(),
-            _buildThemeTile(isDarkMode),
             const SizedBox(height: 32),
 
             // Logout
@@ -226,6 +215,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
     Widget? trailing,
     bool destructive = false,
   }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bool isSmall = screenWidth < 350;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -234,7 +226,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
         border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.05)),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        contentPadding: EdgeInsets.symmetric(horizontal: isSmall ? 8 : 16, vertical: 4),
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
@@ -244,11 +236,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
           child: Icon(
             icon,
             color: destructive ? Colors.red : AppTheme.primaryBlue,
-            size: 22,
+            size: isSmall ? 18 : 22,
           ),
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-        subtitle: Text(subtitle, style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
+        title: Text(title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: isSmall ? 13 : 15)),
+        subtitle: Text(subtitle, style: TextStyle(color: AppTheme.slate500, fontSize: isSmall ? 10 : 12)),
         trailing: trailing ?? Icon(Icons.chevron_right_rounded, color: AppTheme.slate300, size: 20),
         onTap: onTap,
       ),
@@ -330,6 +322,119 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
   }
 
   // Implementation of actions (Export, Reset, etc.) copied and adapted from ExportScreen
+  Widget _buildSyncControls() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildSyncButton(
+                  label: 'Push Data',
+                  icon: Icons.cloud_upload_outlined,
+                  color: Colors.blue,
+                  onTap: () => _handlePush(context, ref),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSyncButton(
+                  label: 'Pull Data',
+                  icon: Icons.cloud_download_outlined,
+                  color: Colors.green,
+                  onTap: () => _handlePull(context, ref),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Sync local changes or download cloud updates manually.',
+            style: TextStyle(color: AppTheme.slate500, fontSize: 11),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSyncButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handlePush(BuildContext context, WidgetRef ref) async {
+    _showSyncFeedback(context, 'Pushing data...');
+    try {
+      await ref.read(syncManagerProvider).pushAll();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Push completed successfully.')));
+      }
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Push failed: $e')));
+    }
+  }
+
+  Future<void> _handlePull(BuildContext context, WidgetRef ref) async {
+    _showSyncFeedback(context, 'Pulling data...');
+    try {
+      await ref.read(syncManagerProvider).pullAll();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pull completed successfully.')));
+      }
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Pull failed: $e')));
+    }
+  }
+
+  void _showSyncFeedback(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(width: 16),
+            Text(message),
+          ],
+        ),
+        duration: const Duration(seconds: 30),
+      ),
+    );
+  }
+
   Future<void> _exportAllData(BuildContext context, WidgetRef ref) async {
     final products = ref.read(productProvider);
     final customers = ref.read(customerProvider);
@@ -358,67 +463,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
       }
     } catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr(ref, 'error')}: $e')));
-    }
-  }
-
-  Future<void> _exportProductsCsv(BuildContext context, WidgetRef ref) async {
-    final products = ref.read(productProvider);
-    List<List<dynamic>> rows = [
-      ["ID", "Name", "Description", "Price", "Purchase Price", "Stock", "Category", "Quality", "Created At"]
-    ];
-    for (var p in products) {
-      rows.add([
-        p.id,
-        p.name,
-        p.description,
-        p.price,
-        p.purchasePrice,
-        p.stockQuantity,
-        p.productType ?? '',
-        p.quality ?? '',
-        p.createdAt.toIso8601String()
-      ]);
-    }
-    String csvData = rows.map((row) {
-      return row.map((e) {
-        final value = e?.toString() ?? '';
-        final escaped = value.replaceAll('"', '""');
-        if (escaped.contains(',') || escaped.contains('\n') || escaped.contains('"')) {
-          return '"$escaped"';
-        }
-        return escaped;
-      }).join(',');
-    }).join('\n');
-    
-    try {
-      final String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
-      if (selectedDirectory == null) return;
-
-      final file = File('$selectedDirectory/inventory_${DateTime.now().millisecondsSinceEpoch}.csv');
-      await file.writeAsString(csvData);
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('CSV exported to: ${file.path}')),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr(ref, 'error')}: $e')));
-    }
-  }
-
-  Future<void> _handleManualSync(BuildContext context, WidgetRef ref) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Row(children: [CircularProgressIndicator(strokeWidth: 2), SizedBox(width: 12), Text(tr(ref, 'syncing_data'))])),
-    );
-    try {
-      await ref.read(syncManagerProvider).syncAll();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(ref, 'sync_completed'))));
-      }
-    } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr(ref, 'sync_failed')}: $e')));
     }
   }
 
@@ -516,7 +560,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
       context: context,
       builder: (context) => AlertDialog(
         title: Text(tr(ref, 'confirm_full_reset')),
-        content: Text(tr(ref, 'confirm_reset_desc')),
+        content: const Text('Are you sure you want to wipe all local data? This will not affect your cloud database, but you will need to pull data again to see it.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr(ref, 'cancel'))),
           TextButton(
@@ -530,10 +574,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
     if (confirmed != true) return;
 
     try {
-      await ref.read(maintenanceServiceProvider).completeSystemReset();
+      await ref.read(maintenanceServiceProvider).resetLocalDatabase();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(tr(ref, 'system_reset_completed'))),
+          const SnackBar(content: Text('Local data wiped successfully.')),
         );
       }
     } catch (e) {

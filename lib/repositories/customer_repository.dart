@@ -120,6 +120,7 @@ class CustomerRepository {
       
       final response = await query;
       final List<dynamic> remoteData = response;
+      logger.info('Fetched ${remoteData.length} customers from Supabase');
       
       for (var data in remoteData) {
         final String sId = data['server_id'];
@@ -132,9 +133,9 @@ class CustomerRepository {
         
         if (existingJson != null) {
           final existing = Customer.fromJson(existingJson);
-          if (existing.isDirty) continue;
-          
           final remoteUpdatedAt = DateTime.parse(data['updated_at']);
+          
+          // If remote is newer, it wins (User says DB is correct one)
           if (!remoteUpdatedAt.isAfter(existing.updatedAt)) {
             continue;
           }

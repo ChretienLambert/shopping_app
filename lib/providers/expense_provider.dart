@@ -11,6 +11,7 @@ class ExpenseNotifier extends StateNotifier<List<Expense>> {
 
   Future<void> loadExpenses() async {
     final expenses = await _repository.getAll();
+    if (!mounted) return;
     state = expenses..sort((a, b) => b.expenseDate.compareTo(a.expenseDate));
   }
 
