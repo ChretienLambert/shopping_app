@@ -80,7 +80,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           source: source,
           maxWidth: 1200,
           maxHeight: 1200,
-          imageQuality: 85,
+          imageQuality: 85, // Good quality but reasonable file size
         );
         if (pickedFile != null && mounted) {
           final category = isStock ? 'products' : 'receipts';
@@ -333,28 +333,6 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     );
   }
 
-  Future<void> _confirmDelete(Expense expense) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${tr(ref, 'delete')}?'),
-        content: Text('${tr(ref, 'are_you_sure_delete')} "${expense.description}"?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr(ref, 'cancel'))),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(tr(ref, 'delete')),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await ref.read(expenseProvider.notifier).deleteExpense(expense);
-    }
-  }
-
   String _getCategoryName(ExpenseCategory category) {
     switch (category) {
       case ExpenseCategory.stock:
@@ -396,10 +374,6 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
-  }
-
-  String _formatTime(DateTime date) {
-    return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
 
   void _addNewStockCategory(TextEditingController controller) {
@@ -464,14 +438,6 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
-          double projectedProfit = 0;
-          if (selectedCategory == ExpenseCategory.stock) {
-            final qty = int.tryParse(stockQuantityController.text) ?? 0;
-            final cost = double.tryParse(stockPurchasePriceController.text) ?? 0;
-            final resale = double.tryParse(stockResalePriceController.text) ?? 0;
-            projectedProfit = (resale - cost) * qty;
-          }
-          
           final currentSales = ref.read(saleProvider);
           final currentExpenses = ref.read(expenseProvider);
           final currentRevenue = currentSales.fold<double>(0, (sum, sale) => sum + sale.totalAmount);
@@ -488,200 +454,209 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
               : baseCapital;
           
           return AlertDialog(
-          title: Text(expense == null ? tr(ref, 'add_expense') : tr(ref, 'edit_expense')),
-          content: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                    if (expense == null) 
-                    DropdownButtonFormField<ExpenseCategory>(
-                      initialValue: selectedCategory,
-                      decoration: InputDecoration(
-                        labelText: tr(ref, 'category'),
-                        border: const OutlineInputBorder(),
-                      ),
-                      items: ExpenseCategory.values
-                          .where((c) => c != ExpenseCategory.personalPayout && c != ExpenseCategory.capitalInjection)
-                          .map((category) {
-                        return DropdownMenuItem(
-                          value: category,
-                          child: Row(
-                            children: [
-                              Icon(_getCategoryIcon(category), color: _getCategoryColor(category), size: 18),
-                              const SizedBox(width: 8),
-                              Text(_getCategoryName(category)),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => selectedCategory = value);
-                        }
-                      },
-                    ) else ...[
-                       Container(
-                         padding: const EdgeInsets.all(12),
-                         decoration: BoxDecoration(
-                           color: _getCategoryColor(selectedCategory).withValues(alpha: 0.1),
-                           borderRadius: BorderRadius.circular(12),
-                         ),
-                         child: Row(
-                           children: [
-                             Icon(_getCategoryIcon(selectedCategory), color: _getCategoryColor(selectedCategory), size: 20),
-                             const SizedBox(width: 12),
-                             Text(_getCategoryName(selectedCategory), style: const TextStyle(fontWeight: FontWeight.bold)),
-                           ],
-                         ),
-                       ),
-                       const SizedBox(height: 12),
-                    ],
-                  const SizedBox(height: 12),
-                  InkWell(
-                    onTap: () async {
-                      final DateTime? picked = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate,
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                      );
-                      if (picked != null && picked != selectedDate) {
-                        setState(() => selectedDate = picked);
-                      }
-                    },
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: tr(ref, 'date'),
-                        border: const OutlineInputBorder(),
-                        suffixIcon: const Icon(Icons.calendar_today),
-                      ),
-                      child: Text(
-                        _formatDate(selectedDate),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (selectedCategory == ExpenseCategory.stock) ...[
-                    TextFormField(
-                      controller: stockNameController,
-                      decoration: InputDecoration(
-                        labelText: tr(ref, 'product_names'),
-                        border: const OutlineInputBorder(),
-                      ),
-                      validator: (value) => (value == null || value.isEmpty) ? tr(ref, 'required') : null,
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: stockTypeController.text.isNotEmpty ? stockTypeController.text : null,
-                            decoration: InputDecoration(
-                              labelText: tr(ref, 'garment_category'),
-                              border: const OutlineInputBorder(),
+            title: Text(expense == null ? tr(ref, 'add_expense') : tr(ref, 'edit_expense')),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 450),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Form(
+                      key: formKey,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (expense == null) 
+                            DropdownButtonFormField<ExpenseCategory>(
+                              initialValue: selectedCategory,
+                              decoration: InputDecoration(
+                                labelText: tr(ref, 'category'),
+                                border: const OutlineInputBorder(),
+                              ),
+                              items: ExpenseCategory.values
+                                  .where((c) => c != ExpenseCategory.personalPayout && c != ExpenseCategory.capitalInjection)
+                                  .map((category) {
+                                return DropdownMenuItem(
+                                  value: category,
+                                  child: Row(
+                                    children: [
+                                      Icon(_getCategoryIcon(category), color: _getCategoryColor(category), size: 18),
+                                      const SizedBox(width: 8),
+                                      Text(_getCategoryName(category)),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() => selectedCategory = value);
+                                }
+                              },
+                            )
+                          else ...[
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: _getCategoryColor(selectedCategory).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(_getCategoryIcon(selectedCategory), color: _getCategoryColor(selectedCategory), size: 20),
+                                  const SizedBox(width: 12),
+                                  Text(_getCategoryName(selectedCategory), style: const TextStyle(fontWeight: FontWeight.bold)),
+                                ],
+                              ),
                             ),
-                            items: _stockCategories.map((category) {
-                              return DropdownMenuItem(
-                                value: category,
-                                child: Text(tr(ref, category)),
+                            const SizedBox(height: 12),
+                          ],
+                          const SizedBox(height: 12),
+                          InkWell(
+                            onTap: () async {
+                              final DateTime? picked = await showDatePicker(
+                                context: context,
+                                initialDate: selectedDate,
+                                firstDate: DateTime(2000),
+                                lastDate: DateTime.now().add(const Duration(days: 365)),
                               );
-                            }).toList(),
-                            onChanged: expense != null ? null : (value) {
-                              if (value != null) {
-                                stockTypeController.text = value;
-                                setState(() {});
+                              if (picked != null && picked != selectedDate) {
+                                setState(() => selectedDate = picked);
                               }
                             },
+                            child: InputDecorator(
+                              decoration: InputDecoration(
+                                labelText: tr(ref, 'date'),
+                                border: const OutlineInputBorder(),
+                                suffixIcon: const Icon(Icons.calendar_today),
+                              ),
+                              child: Text(
+                                _formatDate(selectedDate),
+                              ),
+                            ),
                           ),
-                        ),
-                        if (expense == null) ...[
-                          const SizedBox(width: 8),
-                          IconButton.filled(
-                            onPressed: () => _addNewStockCategory(stockTypeController),
-                            icon: const Icon(Icons.add),
-                            style: IconButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
-                          ),
+                          const SizedBox(height: 12),
+                          if (selectedCategory == ExpenseCategory.stock) ...[
+                            TextFormField(
+                              controller: stockNameController,
+                              decoration: InputDecoration(
+                                labelText: tr(ref, 'product_names'),
+                                border: const OutlineInputBorder(),
+                              ),
+                              validator: (value) => (value == null || value.isEmpty) ? tr(ref, 'required') : null,
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: DropdownButtonFormField<String>(
+                                    initialValue: stockTypeController.text.isNotEmpty ? stockTypeController.text : null,
+                                    decoration: InputDecoration(
+                                      labelText: tr(ref, 'garment_category'),
+                                      border: const OutlineInputBorder(),
+                                    ),
+                                    items: _stockCategories.map((category) {
+                                      return DropdownMenuItem(
+                                        value: category,
+                                        child: Text(tr(ref, category)),
+                                      );
+                                    }).toList(),
+                                    onChanged: expense != null ? null : (value) {
+                                      if (value != null) {
+                                        stockTypeController.text = value;
+                                        setState(() {});
+                                      }
+                                    },
+                                  ),
+                                ),
+                                if (expense == null) ...[
+                                  const SizedBox(width: 8),
+                                  IconButton.filled(
+                                    onPressed: () => _addNewStockCategory(stockTypeController),
+                                    icon: const Icon(Icons.add),
+                                    style: IconButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            DropdownButtonFormField<String>(
+                              initialValue: selectedStockQuality,
+                              decoration: InputDecoration(
+                                labelText: tr(ref, 'condition_tier'),
+                                border: const OutlineInputBorder(),
+                              ),
+                              items: [
+                                DropdownMenuItem(value: 'second_hand', child: Text(tr(ref, 'second_hand'))),
+                                DropdownMenuItem(value: 'new_condition', child: Text(tr(ref, 'new_condition'))),
+                              ],
+                              onChanged: expense != null ? null : (value) => setState(() => selectedStockQuality = value ?? 'second_hand'),
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: stockQuantityController,
+                              decoration: InputDecoration(labelText: tr(ref, 'stock_quantity'), border: const OutlineInputBorder()),
+                              keyboardType: TextInputType.number,
+                              enabled: expense == null, // Lock quantity on edit
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              onChanged: (_) => setState(() {}),
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: stockPurchasePriceController,
+                              decoration: InputDecoration(labelText: tr(ref, 'purchase_price_unit'), border: const OutlineInputBorder()),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              enabled: expense == null, // Lock purchase price on edit
+                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
+                              onChanged: (_) => setState(() {}),
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: stockResalePriceController,
+                              decoration: InputDecoration(labelText: tr(ref, 'resale_price_unit'), border: const OutlineInputBorder()),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              enabled: expense == null, // Lock resale price on edit
+                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
+                              onChanged: (_) => setState(() {}),
+                            ),
+                            const SizedBox(height: 16),
+                            GestureDetector(
+                              onTap: () => _pickImage(true, (path) => setState(() => stockImagePath = path)),
+                              child: Center(child: SmartImage(imagePath: stockImagePath, width: 320, height: 150, borderRadius: 12)),
+                            ),
+                          ] else ...[
+                            TextFormField(
+                              controller: descriptionController,
+                              decoration: InputDecoration(labelText: '${tr(ref, 'description')} *', border: const OutlineInputBorder()),
+                              validator: (value) => value == null || value.isEmpty ? tr(ref, 'required') : null,
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: amountController,
+                              decoration: InputDecoration(labelText: '${tr(ref, 'amount')} *', border: const OutlineInputBorder()),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              enabled: expense == null, // Lock amount on edit
+                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
+                              validator: (value) => value == null || value.isEmpty ? tr(ref, 'required') : null,
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: notesController,
+                              decoration: InputDecoration(labelText: tr(ref, 'notes'), border: const OutlineInputBorder()),
+                              maxLines: 2,
+                            ),
+                            const SizedBox(height: 16),
+                            GestureDetector(
+                              onTap: () => _pickImage(false, (path) => setState(() => receiptImagePath = path)),
+                              child: Center(child: SmartImage(imagePath: receiptImagePath, width: 320, height: 150, borderRadius: 12)),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedStockQuality,
-                      decoration: InputDecoration(
-                        labelText: tr(ref, 'condition_tier'),
-                        border: const OutlineInputBorder(),
                       ),
-                      items: [
-                        DropdownMenuItem(value: 'second_hand', child: Text(tr(ref, 'second_hand'))),
-                        DropdownMenuItem(value: 'new_condition', child: Text(tr(ref, 'new_condition'))),
-                      ],
-                      onChanged: expense != null ? null : (value) => setState(() => selectedStockQuality = value ?? 'second_hand'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: stockQuantityController,
-                      decoration: InputDecoration(labelText: tr(ref, 'stock_quantity'), border: const OutlineInputBorder()),
-                      keyboardType: TextInputType.number,
-                      enabled: expense == null, // Lock quantity on edit
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: stockPurchasePriceController,
-                      decoration: InputDecoration(labelText: tr(ref, 'purchase_price_unit'), border: const OutlineInputBorder()),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      enabled: expense == null, // Lock purchase price on edit
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: stockResalePriceController,
-                      decoration: InputDecoration(labelText: tr(ref, 'resale_price_unit'), border: const OutlineInputBorder()),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      enabled: expense == null, // Lock resale price on edit
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 16),
-                    GestureDetector(
-                      onTap: () => _pickImage(true, (path) => setState(() => stockImagePath = path)),
-                      child: Center(child: SmartImage(imagePath: stockImagePath, width: 320, height: 150, borderRadius: 12)),
-                    ),
-                  ] else ...[
-                    TextFormField(
-                      controller: descriptionController,
-                      decoration: InputDecoration(labelText: '${tr(ref, 'description')} *', border: const OutlineInputBorder()),
-                      validator: (value) => value == null || value.isEmpty ? tr(ref, 'required') : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: amountController,
-                      decoration: InputDecoration(labelText: '${tr(ref, 'amount')} *', border: const OutlineInputBorder()),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      enabled: expense == null, // Lock amount on edit
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
-                      validator: (value) => value == null || value.isEmpty ? tr(ref, 'required') : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: notesController,
-                      decoration: InputDecoration(labelText: tr(ref, 'notes'), border: const OutlineInputBorder()),
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 16),
-                    GestureDetector(
-                      onTap: () => _pickImage(false, (path) => setState(() => receiptImagePath = path)),
-                      child: Center(child: SmartImage(imagePath: receiptImagePath, width: 320, height: 150, borderRadius: 12)),
                     ),
                   ],
-                ],
+                ),
               ),
             ),
-          ),
           actions: [
             if (_validationError != null)
               Padding(

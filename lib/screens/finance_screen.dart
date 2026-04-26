@@ -468,13 +468,25 @@ class FinanceScreen extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Text(tr(ref, 'capital_energy'), style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
-              const SizedBox(width: 6),
-              Tooltip(
-                message: tr(ref, 'capital_energy_desc'),
-                child: Icon(Icons.help_outline_rounded, color: isDarkMode ? AppTheme.slate400 : AppTheme.slate500, size: 16),
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        tr(ref, 'capital_energy'), 
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: tr(ref, 'capital_energy_desc'),
+                      child: Icon(Icons.help_outline_rounded, color: isDarkMode ? AppTheme.slate400 : AppTheme.slate500, size: 16),
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Text('${(completion * 100).toStringAsFixed(1)}%', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
             ],
           ),
@@ -546,8 +558,6 @@ class FinanceScreen extends ConsumerWidget {
   }
 
   Widget _buildSummaryRow(String label, String value, {String? tooltip}) {
-    final valueWidget = Text(value, style: const TextStyle(fontWeight: FontWeight.w600));
-    
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -560,12 +570,14 @@ class FinanceScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 8),
-          tooltip != null
-              ? Tooltip(
-                  message: tooltip,
-                  child: valueWidget,
-                )
-              : valueWidget,
+          Flexible(
+            child: tooltip != null
+                ? Tooltip(
+                    message: tooltip,
+                    child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                  )
+                : Text(value, style: const TextStyle(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+          ),
         ],
       ),
     );
@@ -673,6 +685,13 @@ class FinanceScreen extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () {
+              Navigator.pop(context);
+              _addInjection(context, ref, expense: injection);
+            },
+            child: Text(tr(ref, 'edit')),
+          ),
+          TextButton(
+            onPressed: () {
               ref.read(expenseProvider.notifier).deleteExpense(injection);
               Navigator.pop(context);
             },
@@ -705,23 +724,27 @@ class FinanceScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _addInjection(BuildContext context, WidgetRef ref) async {
-    final amountController = TextEditingController();
-    final descriptionController = TextEditingController();
-    DateTime selectedDate = DateTime.now();
+  Future<void> _addInjection(BuildContext context, WidgetRef ref, {Expense? expense}) async {
+    final amountController = TextEditingController(text: expense?.amount.toString());
+    final descriptionController = TextEditingController(text: expense?.description == 'Capital Injection' ? '' : expense?.description);
+    DateTime selectedDate = expense?.expenseDate ?? DateTime.now();
     
     final result = await showDialog<Expense>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text(tr(ref, 'inject_capital')),
+          title: Text(expense == null ? tr(ref, 'inject_capital') : tr(ref, 'edit_expense')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: amountController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(labelText: tr(ref, 'amount_xaf')),
+                decoration: InputDecoration(
+                  labelText: tr(ref, 'amount_xaf'),
+                  helperText: expense != null ? 'Amount cannot be modified' : null,
+                ),
+                enabled: expense == null,
               ),
               const SizedBox(height: 12),
               TextField(
@@ -757,23 +780,25 @@ class FinanceScreen extends ConsumerWidget {
             ElevatedButton(
               onPressed: () => Navigator.pop(
                 context,
-                Expense(
-                  amount: double.tryParse(amountController.text) ?? 0,
-                  description: descriptionController.text.isEmpty
+                (expense ?? Expense())..amount = double.tryParse(amountController.text) ?? 0
+                  ..description = descriptionController.text.isEmpty
                       ? tr(ref, 'cash_capital_injection')
-                      : descriptionController.text,
-                  category: ExpenseCategory.capitalInjection,
-                  expenseDate: selectedDate,
-                ),
+                      : descriptionController.text
+                  ..category = ExpenseCategory.capitalInjection
+                  ..expenseDate = selectedDate,
               ),
-              child: Text(tr(ref, 'add')),
+              child: Text(expense == null ? tr(ref, 'add') : tr(ref, 'save')),
             ),
           ],
         ),
       ),
     );
     if (result == null || result.amount <= 0) return;
-    await ref.read(expenseProvider.notifier).addExpense(result);
+    if (expense != null) {
+      await ref.read(expenseProvider.notifier).updateExpense(result);
+    } else {
+      await ref.read(expenseProvider.notifier).addExpense(result);
+    }
   }
 
   void _showQuickResume(
@@ -893,15 +918,6 @@ class FinanceScreen extends ConsumerWidget {
     final positiveColor = isDarkMode ? AppTheme.chart5 : Colors.green;
     final negativeColor = isDarkMode ? AppTheme.chart3 : Colors.red;
     
-    final valueWidget = Text(
-      value,
-      style: TextStyle(
-        fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
-        fontSize: 13,
-        color: isHighlight ? (value.startsWith('-') ? negativeColor : positiveColor) : null,
-      ),
-    );
-    
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -915,12 +931,30 @@ class FinanceScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 8),
-          tooltip != null
-              ? Tooltip(
-                  message: tooltip,
-                  child: valueWidget,
-                )
-              : valueWidget,
+          Flexible(
+            child: tooltip != null
+                ? Tooltip(
+                    message: tooltip,
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
+                        fontSize: 13,
+                        color: isHighlight ? (value.startsWith('-') ? negativeColor : positiveColor) : null,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  )
+                : Text(
+                    value,
+                    style: TextStyle(
+                      fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
+                      fontSize: 13,
+                      color: isHighlight ? (value.startsWith('-') ? negativeColor : positiveColor) : null,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+          ),
         ],
       ),
     );
@@ -928,43 +962,6 @@ class FinanceScreen extends ConsumerWidget {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
-  }
-
-  void _showFinancialLogicDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Enterprise Financial Logic'),
-        content: const SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('How your data is calculated:', style: TextStyle(fontWeight: FontWeight.bold)),
-              SizedBox(height: 12),
-              Text('• Revenue: Total from all paid sales (Direct or Delivery).'),
-              Text('• Stock Deployed: Total cost of purchasing items in your inventory.'),
-              Text('• Business Expenses: Operational costs (rent, transport, packaging).'),
-              Text('• Realized Profit: (Revenue - Stock Deployed). This is your gross business performance.'),
-              Text('• Available Profit: (Realized Profit - Business Expenses - Payouts). This is your actual spendable cash.'),
-              SizedBox(height: 16),
-              Text('Capital Definitions:', style: TextStyle(fontWeight: FontWeight.bold)),
-              SizedBox(height: 8),
-              Text('• Cash Capital: Total Injections + Sales - (Expenses + Payouts). This is what you have in hand.'),
-              Text('• Assets Capital: The value of all items currently in your stock.'),
-              Text('• Capital Pool: Cash Capital + Assets Capital. Your total business worth.'),
-              SizedBox(height: 16),
-              Text('Consistency Tips:', style: TextStyle(fontWeight: FontWeight.bold)),
-              SizedBox(height: 8),
-              Text('The app syncs automatically every 3 minutes. On mobile, swipe down to refresh manually. The database is the master source; local changes are updated to match cloud state whenever you pull.'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Understood')),
-        ],
-      ),
-    );
   }
 
   Future<void> _showWeeklyCheckupDialog(

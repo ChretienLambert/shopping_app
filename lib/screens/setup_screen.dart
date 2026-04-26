@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/language_provider.dart';
+import '../theme/app_theme.dart';
 import '../utils/app_localization.dart';
 
 class SetupScreen extends ConsumerStatefulWidget {
@@ -20,11 +21,6 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   String _selectedLanguage = 'en';
   bool _saving = false;
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
   Future<void> _completeSetup() async {
     setState(() => _saving = true);
     final prefs = await SharedPreferences.getInstance();
@@ -40,7 +36,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -55,25 +51,31 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                     // App Logo or Icon
                     Center(
                       child: Container(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
+                          gradient: AppTheme.logoGradient,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.primaryBlue.withValues(alpha: 0.3),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
                         ),
-                        child: Icon(
-                          Icons.storefront_rounded,
-                          size: 64,
-                          color: Theme.of(context).primaryColor,
+                        child: const Icon(
+                          Icons.trending_up_rounded,
+                          size: 48,
+                          color: Colors.white,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 32),
                     Text(
                       tr(ref, 'setup_shop'),
-                      style: const TextStyle(
-                        fontSize: 28,
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.bold,
-                        letterSpacing: -0.5,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -82,37 +84,39 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                       tr(ref, 'setup_business_profile'),
                       style: TextStyle(
                         fontSize: 16,
-                        color: Colors.grey[600],
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 40),
                     
                     // Language Selection
                     Text(
                       tr(ref, 'language'),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: Colors.black87,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
-                      initialValue: _selectedLanguage,
+                      // ignore: deprecated_member_use
+                      value: _selectedLanguage,
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: Colors.grey[50],
+                        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
+                          borderSide: BorderSide(color: Theme.of(context).colorScheme.outline),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
+                          borderSide: BorderSide(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5)),
                         ),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
+                      dropdownColor: Theme.of(context).colorScheme.surface,
                       items: [
                         DropdownMenuItem(value: 'en', child: Text(tr(ref, 'english'))),
                         DropdownMenuItem(value: 'fr', child: Text(tr(ref, 'french'))),
@@ -125,37 +129,49 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                       },
                     ),
                     
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 48),
                     
                     // Action Button
-                    ElevatedButton(
-                      onPressed: _saving ? null : _completeSetup,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 0,
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: AppTheme.primaryGradient,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primaryBlue.withValues(alpha: 0.3),
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
                       ),
-                      child: _saving
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
+                      child: ElevatedButton(
+                        onPressed: _saving ? null : _completeSetup,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: _saving
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(
                                 tr(ref, 'start_app'),
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                            ),
+                      ),
                     ),
                   ],
                 ),

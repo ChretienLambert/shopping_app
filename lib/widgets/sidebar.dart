@@ -42,55 +42,47 @@ class Sidebar extends ConsumerWidget {
         children: [
           // Logo Section
           Container(
-            padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
+            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1)),
             ),
-            child: isSmallScreen
-                ? Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      gradient: AppTheme.logoGradient,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.trending_up, color: Colors.white, size: 24),
-                  )
-                : Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          gradient: AppTheme.logoGradient,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.trending_up, color: Colors.white, size: 24),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Corporate Ladies',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              'Business Suite',
-                              style: TextStyle(
-                                color: Theme.of(context).textTheme.bodySmall?.color,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.logoGradient,
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  child: const Icon(Icons.trending_up, color: Colors.white, size: 24),
+                ),
+                if (!isSmallScreen || isDrawer) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Corporate Ladies',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'Business Suite',
+                          style: TextStyle(
+                            color: Theme.of(context).textTheme.bodySmall?.color,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
           
           // Navigation Items

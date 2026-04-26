@@ -42,7 +42,7 @@ android {
 
     defaultConfig {
         applicationId "com.shopping.shopping_app"
-        minSdkVersion flutter.minSdkVersion
+        minSdkVersion 21
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

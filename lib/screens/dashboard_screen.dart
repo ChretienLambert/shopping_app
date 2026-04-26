@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/weekly_checkup.dart';
-import '../models/expense.dart';
+import '../providers/navigation_provider.dart';
 import '../repositories/weekly_checkup_repository.dart';
 import '../providers/expense_provider.dart';
 import '../providers/product_provider.dart';
@@ -62,21 +61,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        tr(ref, 'financial_health'),
-                        style: Theme.of(context).textTheme.headlineMedium,
-                      ),
-                      Text(
-                        tr(ref, 'real_time_performance'),
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          tr(ref, 'financial_health'),
+                          style: Theme.of(context).textTheme.headlineMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          tr(ref, 'real_time_performance'),
+                          style: Theme.of(context).textTheme.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(width: 16),
-                  _buildToggle(),
+                  _buildToggle(isMobile),
                 ],
               ),
               const SizedBox(height: 32),
@@ -84,11 +87,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    tr(ref, 'financial_health'),
-                    style: Theme.of(context).textTheme.titleLarge,
+                  Expanded(
+                    child: Text(
+                      tr(ref, 'financial_health'),
+                      style: Theme.of(context).textTheme.titleLarge,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  _buildToggle(),
+                  const SizedBox(width: 8),
+                  _buildToggle(isMobile),
                 ],
               ),
               const SizedBox(height: 16),
@@ -189,7 +196,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               _buildLowStockAlert(stats),
               const SizedBox(height: 32),
             ],
-            Text(tr(ref, 'recent_activity'), style: Theme.of(context).textTheme.titleLarge),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(tr(ref, 'recent_activity'), style: Theme.of(context).textTheme.titleLarge),
+                TextButton(
+                  onPressed: () {
+                    ref.read(navigationProvider.notifier).state = 3; // Navigate to Sales/Activity
+                  },
+                  child: Text(tr(ref, 'view_all')),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             _buildRecentActivityList(stats.recentActivity),
           ],
@@ -198,7 +216,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildToggle() {
+  Widget _buildToggle(bool isMobile) {
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
@@ -208,19 +226,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildToggleButton(tr(ref, 'this_week'), _showWeekly, () => setState(() => _showWeekly = true)),
-          _buildToggleButton(tr(ref, 'all_time'), !_showWeekly, () => setState(() => _showWeekly = false)),
+          _buildToggleButton(tr(ref, 'this_week'), _showWeekly, isMobile, () => setState(() => _showWeekly = true)),
+          _buildToggleButton(tr(ref, 'all_time'), !_showWeekly, isMobile, () => setState(() => _showWeekly = false)),
         ],
       ),
     );
   }
 
-  Widget _buildToggleButton(String label, bool isSelected, VoidCallback onTap) {
+  Widget _buildToggleButton(String label, bool isSelected, bool isMobile, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected ? AppTheme.primaryBlue : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
@@ -230,7 +248,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           style: TextStyle(
             color: isSelected ? Colors.white : Theme.of(context).colorScheme.onSurface,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 12,
+            fontSize: isMobile ? 11 : 12,
           ),
         ),
       ),
@@ -302,10 +320,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${((_showWeekly ? stats.coverage : stats.totalCoverage) * 100).toStringAsFixed(1)}% ${tr(ref, 'recovered')}', 
-                style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
-              Text('${tr(ref, 'remaining')}: ${CurrencyUtils.format(_showWeekly ? stats.remainingToRecover : stats.totalRemainingToRecover)}',
-                style: Theme.of(context).textTheme.labelLarge),
+              Flexible(
+                child: Text('${((_showWeekly ? stats.coverage : stats.totalCoverage) * 100).toStringAsFixed(1)}% ${tr(ref, 'recovered')}', 
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text('${tr(ref, 'remaining')}: ${CurrencyUtils.format(_showWeekly ? stats.remainingToRecover : stats.totalRemainingToRecover)}',
+                  style: Theme.of(context).textTheme.labelLarge,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                ),
+              ),
             ],
           ),
         ],
@@ -331,11 +359,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    item['isRaw'] == true 
-                      ? item['value'].toString() 
-                      : CurrencyUtils.format(item['value']), 
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  Flexible(
+                    child: Text(
+                      item['isRaw'] == true 
+                        ? item['value'].toString() 
+                        : CurrencyUtils.format(item['value']), 
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -485,7 +516,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white70)),
+        Expanded(child: Text(label, style: const TextStyle(color: Colors.white70), overflow: TextOverflow.ellipsis)),
+        const SizedBox(width: 8),
         Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
       ],
     );
@@ -520,7 +552,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
           TextButton(
             onPressed: () {
-               // Navigation to products screen or similar
+              ref.read(navigationProvider.notifier).state = 1; // Catalogs/Products
             },
             child: Text(tr(ref, 'view'), style: const TextStyle(fontWeight: FontWeight.bold)),
           ),

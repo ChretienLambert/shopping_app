@@ -283,7 +283,8 @@ class _CustomerExpandableCardState extends ConsumerState<_CustomerExpandableCard
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(sale.operationId, style: const TextStyle(fontSize: 12)),
+                              Expanded(child: Text(sale.operationId, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis)),
+                              const SizedBox(width: 8),
                               Text(CurrencyUtils.format(sale.totalAmount), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                             ],
                           ),

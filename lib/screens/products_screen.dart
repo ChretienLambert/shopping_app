@@ -533,51 +533,70 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _detailMetricCard(
-                              icon: Icons.inventory_2_outlined,
-                              label: tr(ref, 'stock_level'),
-                              value:
-                                  '${product.stockQuantity} ${tr(ref, 'units')}',
-                              color: stockColor,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _detailMetricCard(
-                              icon: Icons.calendar_today_outlined,
-                              label: tr(ref, 'date'),
-                              value: _formatDate(product.createdAt),
-                              color: AppTheme.slate600,
-                            ),
-                          ),
-                        ],
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final double cardWidth = (constraints.maxWidth - 12) / 2;
+                          final bool wrapCards = constraints.maxWidth < 320;
+                          
+                          return Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              SizedBox(
+                                width: wrapCards ? constraints.maxWidth : cardWidth,
+                                child: _detailMetricCard(
+                                  icon: Icons.inventory_2_outlined,
+                                  label: tr(ref, 'stock_level'),
+                                  value: '${product.stockQuantity} ${tr(ref, 'units')}',
+                                  color: stockColor,
+                                ),
+                              ),
+                              SizedBox(
+                                width: wrapCards ? constraints.maxWidth : cardWidth,
+                                child: _detailMetricCard(
+                                  icon: Icons.calendar_today_outlined,
+                                  label: tr(ref, 'date'),
+                                  value: _formatDate(product.createdAt),
+                                  color: AppTheme.slate600,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                       const SizedBox(height: 20),
                       _sectionTitle('Pricing'),
                       const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _priceCard(
-                              title: tr(ref, 'purchase_price_unit'),
-                              value: CurrencyUtils.format(product.purchasePrice),
-                              subtitle: 'Managed from stock expenses',
-                              accent: AppTheme.slate500,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _priceCard(
-                              title: tr(ref, 'selling_price'),
-                              value: CurrencyUtils.format(product.price),
-                              subtitle: 'This is the editable resale price',
-                              accent: AppTheme.primaryBlue,
-                            ),
-                          ),
-                        ],
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                           final double cardWidth = (constraints.maxWidth - 12) / 2;
+                           final bool wrapCards = constraints.maxWidth < 350;
+
+                           return Wrap(
+                             spacing: 12,
+                             runSpacing: 12,
+                             children: [
+                               SizedBox(
+                                 width: wrapCards ? constraints.maxWidth : cardWidth,
+                                 child: _priceCard(
+                                   title: tr(ref, 'purchase_price_unit'),
+                                   value: CurrencyUtils.format(product.purchasePrice),
+                                   subtitle: 'Managed from stock expenses',
+                                   accent: AppTheme.slate500,
+                                 ),
+                               ),
+                               SizedBox(
+                                 width: wrapCards ? constraints.maxWidth : cardWidth,
+                                 child: _priceCard(
+                                   title: tr(ref, 'selling_price'),
+                                   value: CurrencyUtils.format(product.price),
+                                   subtitle: 'This is the editable resale price',
+                                   accent: AppTheme.primaryBlue,
+                                 ),
+                               ),
+                             ],
+                           );
+                        },
                       ),
                       const SizedBox(height: 20),
                       _sectionTitle(tr(ref, 'product_details')),
@@ -848,7 +867,12 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                            ),
                          );
                          if (source != null) {
-                           final file = await picker.pickImage(source: source);
+                           final file = await picker.pickImage(
+                             source: source,
+                             maxWidth: 1200,
+                             maxHeight: 1200,
+                             imageQuality: 85,
+                           );
                            if (file != null) {
                              setState(() => newImagePath = file.path);
                            }

@@ -7,6 +7,7 @@ import '../services/logging_service.dart';
 import '../utils/app_localization.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sidebar.dart';
+import '../providers/navigation_provider.dart';
 import 'dashboard_screen.dart';
 import 'products_screen.dart';
 import 'customers_screen.dart';
@@ -25,7 +26,6 @@ class MainScreen extends ConsumerStatefulWidget {
 }
 
 class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObserver {
-  int _selectedIndex = 0;
   bool _isOnline = true;
   bool _initialSyncChecked = false;
   bool _needsInitialSync = false;
@@ -202,6 +202,8 @@ class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObse
       (icon: Icons.account_balance_outlined, selectedIcon: Icons.account_balance, label: tr(ref, 'finance')),
     ];
 
+    final selectedIndex = ref.watch(navigationProvider);
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -219,8 +221,8 @@ class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObse
         bottomNavigationBar: isMobile
             ? NavigationBar(
                 height: 64, // Slightly shorter for mobile
-                selectedIndex: _selectedIndex,
-                onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+                selectedIndex: selectedIndex,
+                onDestinationSelected: (index) => ref.read(navigationProvider.notifier).state = index,
                 labelBehavior: screenWidth < 380 ? NavigationDestinationLabelBehavior.alwaysHide : NavigationDestinationLabelBehavior.alwaysShow,
                 destinations: navItems
                     .map((item) => NavigationDestination(
@@ -235,15 +237,13 @@ class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObse
           children: [
             if (!isMobile)
               Sidebar(
-                selectedIndex: _selectedIndex,
+                selectedIndex: selectedIndex,
                 onDestinationSelected: (index) {
                   if (index == 6) {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
                     return;
                   }
-                  setState(() {
-                    _selectedIndex = index;
-                  });
+                  ref.read(navigationProvider.notifier).state = index;
                 },
                 isDarkMode: isDarkMode,
                 onThemeToggle: (value) {
@@ -272,6 +272,18 @@ class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObse
                       ),
                       child: Row(
                         children: [
+                          if (isMobile) ...[
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                gradient: AppTheme.logoGradient,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.trending_up_rounded, color: Colors.white, size: 18),
+                            ),
+                            const SizedBox(width: 12),
+                          ],
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -280,7 +292,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObse
                                   children: [
                                     Flexible(
                                       child: Text(
-                                        screenTitles[_selectedIndex],
+                                        screenTitles[selectedIndex],
                                         style: TextStyle(
                                           color: Theme.of(context).colorScheme.onSurface,
                                           fontSize: isMobile ? (screenWidth < 350 ? 16 : 18) : 24,
@@ -290,7 +302,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObse
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    _buildConnectionBadge(isMobile),
+                                    Flexible(child: _buildConnectionBadge(isMobile)),
                                   ],
                                 ),
                                 if (!isMobile)
@@ -324,7 +336,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObse
                     );
                   }),
                   Expanded(
-                    child: _screens[_selectedIndex],
+                    child: _screens[selectedIndex],
                   ),
                 ],
               ),

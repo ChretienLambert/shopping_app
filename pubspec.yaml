@@ -79,3 +79,4 @@ msix_config:
   logo_path: assets/icons/app_icon.png
   capabilities: internetClient, location, microphone, webcam
   install_certificate: false
+  sign_msix: false

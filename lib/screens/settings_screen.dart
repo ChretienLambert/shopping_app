@@ -98,6 +98,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
 
             _buildSectionHeader(tr(ref, 'maintenance')),
             _buildSettingTile(
+              icon: Icons.save_alt_rounded,
+              title: tr(ref, 'save_logs_local'),
+              subtitle: tr(ref, 'save_logs_subtitle'),
+              onTap: () => _saveLogsToLocal(context),
+              trailing: const Icon(Icons.download_rounded, size: 20),
+            ),
+            _buildSettingTile(
               icon: Icons.bug_report_rounded,
               title: tr(ref, 'share_error_logs'),
               subtitle: tr(ref, 'share_logs_subtitle'),
@@ -518,6 +525,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${tr(ref, 'error_sharing_logs')}: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveLogsToLocal(BuildContext context) async {
+    try {
+      final logFile = logger.logFile;
+      if (logFile == null || !await logFile.exists()) {
+         if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(ref, 'no_log_file'))));
+         return;
+      }
+
+      final String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      if (selectedDirectory == null) return;
+
+      final destination = File('$selectedDirectory/app_logs_${DateTime.now().millisecondsSinceEpoch}.txt');
+      await logFile.copy(destination.path);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Logs saved to: ${destination.path}')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save logs: $e')),
         );
       }
     }

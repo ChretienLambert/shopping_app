@@ -129,9 +129,12 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                       style: TextStyle(color: AppTheme.slate500, fontSize: 11),
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      sale.operationId,
-                      style: TextStyle(color: AppTheme.slate400, fontSize: 10),
+                    Expanded(
+                      child: Text(
+                        sale.operationId,
+                        style: TextStyle(color: AppTheme.slate400, fontSize: 10),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
@@ -142,9 +145,12 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                       children: [
                         Icon(Icons.person_outline_rounded, size: 11, color: AppTheme.slate500),
                         const SizedBox(width: 4),
-                        Text(
-                          customer.name,
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Theme.of(context).colorScheme.onSurface),
+                        Expanded(
+                          child: Text(
+                            customer.name,
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Theme.of(context).colorScheme.onSurface),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
@@ -178,7 +184,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
-        sale.status,
+        tr(ref, sale.status.toLowerCase()),
         style: TextStyle(
           color: color,
           fontSize: 10,
@@ -230,7 +236,8 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
 
     Customer? selectedCustomer;
     final List<SaleItem> saleItems = [];
-    double discountPercent = 0;
+    double discountAmount = 0;
+    final discountController = TextEditingController();
     final notesController = TextEditingController();
     final deliveryAddressController = TextEditingController();
     DateTime selectedDate = DateTime.now();
@@ -243,9 +250,11 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
         builder: (context, setState) {
           return AlertDialog(
             title: Text(isDelivery ? tr(ref, 'new_delivery_sale') : tr(ref, 'direct_store_sale')),
-          content: SizedBox(
-            width: 400,
-            child: SingleChildScrollView(
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 450),
+                child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -349,21 +358,21 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                       },
                     ),
                     const SizedBox(height: 8),
-                    DropdownButtonFormField<double>(
-                      initialValue: discountPercent,
+                    TextFormField(
+                      controller: discountController,
                       decoration: InputDecoration(
-                        labelText: tr(ref, 'optional_discount'),
+                        labelText: tr(ref, 'discount_amount'),
+                        hintText: tr(ref, 'enter_discount_amount'),
                         border: const OutlineInputBorder(),
+                        prefixText: 'XAF ',
                       ),
-                      items: [
-                        DropdownMenuItem(value: 0.0, child: Text(tr(ref, 'no_discount'))),
-                        DropdownMenuItem(value: 5.0, child: Text(tr(ref, 'five_percent'))),
-                        DropdownMenuItem(value: 10.0, child: Text(tr(ref, 'ten_percent'))),
-                        DropdownMenuItem(value: 15.0, child: Text(tr(ref, 'fifteen_percent'))),
-                        DropdownMenuItem(value: 20.0, child: Text(tr(ref, 'twenty_percent'))),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
                       ],
                       onChanged: (value) {
-                        setState(() => discountPercent = value ?? 0);
+                        final amount = double.tryParse(value) ?? 0;
+                        setState(() => discountAmount = amount);
                       },
                     ),
                   ],
@@ -524,14 +533,14 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                             ),
                           ],
                         ),
-                        if (discountPercent > 0) ...[
+                        if (discountAmount > 0) ...[
                           const SizedBox(height: 6),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('${tr(ref, 'discount')} (${discountPercent.toStringAsFixed(0)}%)'),
+                              Text(tr(ref, 'discount')),
                               Text(
-                                '-${CurrencyUtils.format((saleItems.fold(0.0, (sum, i) => sum + i.totalPrice) * discountPercent) / 100)}',
+                                '-${CurrencyUtils.format(discountAmount)}',
                                 style: const TextStyle(color: Colors.green),
                               ),
                             ],
@@ -544,12 +553,10 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                             Text(tr(ref, 'grand_total'), style: const TextStyle(fontWeight: FontWeight.bold)),
                             Text(
                               CurrencyUtils.format(
-                                saleItems.fold(0.0, (sum, i) => sum + i.totalPrice) *
-                                    (1 - (discountPercent / 100)),
+                                saleItems.fold(0.0, (sum, i) => sum + i.totalPrice) - discountAmount,
                               ),
                               style: const TextStyle(
                                 fontWeight: FontWeight.w900,
-                                color: AppTheme.primaryBlue,
                                 fontSize: 18,
                               ),
                             ),
@@ -560,8 +567,9 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                   ),
                 ],
               ),
+                ),
+              ),
             ),
-          ),
           actions: [
             if (_validationError != null)
               Padding(
@@ -608,7 +616,6 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                   }
 
                   final subtotal = saleItems.fold(0.0, (sum, i) => sum + i.totalPrice);
-                  final discountAmount = subtotal * (discountPercent / 100);
                   final finalTotal = subtotal - discountAmount;
                   final sale = Sale()
                     ..customerId = selectedCustomer!.id
@@ -619,7 +626,6 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                     ..deliveryAddress = deliveryAddressController.text
                     ..metadataJson = jsonEncode({
                       'subtotal': subtotal,
-                      'discountPercent': discountPercent,
                       'discountAmount': discountAmount,
                     })
                     ..lifecycleStatus = isDelivery
@@ -655,9 +661,9 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
             ),
           ],
         );
-      },
-    ),
-  );
+        },
+      ),
+    );
 }
 
   Future<void> _addCustomerOnSpot(BuildContext context, WidgetRef ref, Function(Customer) onAdded) async {
@@ -724,8 +730,8 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            Text(tr(ref, 'sale_details')),
-            const Spacer(),
+            Expanded(child: Text(tr(ref, 'sale_details'), overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: 8),
             _buildStatusBadge(sale),
           ],
         ),
@@ -735,7 +741,11 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildDetailRow('Operation ID', sale.operationId),
-              _buildDetailRow('Date', '${_formatDate(sale.saleDate)} at ${_formatTime(sale.saleDate)}'),
+              _buildDetailRow('Date', '${_formatDate(sale.saleDate)} at ${_formatTime(sale.saleDate)}',
+                  trailing: IconButton(
+                    icon: const Icon(Icons.edit, size: 16),
+                    onPressed: () => _editSaleDate(context, sale),
+                  )),
               _buildDetailRow('Total', CurrencyUtils.format(sale.totalAmount)),
               if (customer != null) _buildDetailRow('Customer', customer.name),
               _buildDetailRow(
@@ -792,17 +802,106 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildDetailRow(String label, String value, {Widget? trailing}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: AppTheme.slate500, fontSize: 13)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          Expanded(child: Text(label, style: TextStyle(color: AppTheme.slate500, fontSize: 13), overflow: TextOverflow.ellipsis)),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13), textAlign: TextAlign.end)),
+                if (trailing != null) trailing,
+              ],
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _editSaleDate(BuildContext context, Sale sale) async {
+    DateTime selectedDate = sale.saleDate;
+    TimeOfDay selectedTime = TimeOfDay.fromDateTime(sale.saleDate);
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(tr(ref, 'edit_sale_date')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text(tr(ref, 'select_date')),
+                subtitle: Text(_formatDate(selectedDate)),
+                trailing: const Icon(Icons.calendar_today),
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now().add(const Duration(days: 30)),
+                  );
+                  if (date != null) {
+                    setState(() => selectedDate = date);
+                  }
+                },
+              ),
+              ListTile(
+                title: Text(tr(ref, 'select_time')),
+                subtitle: Text('${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}'),
+                trailing: const Icon(Icons.access_time),
+                onTap: () async {
+                  final time = await showTimePicker(
+                    context: context,
+                    initialTime: selectedTime,
+                  );
+                  if (time != null) {
+                    setState(() => selectedTime = time);
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(tr(ref, 'cancel')),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue, foregroundColor: Colors.white),
+              child: Text(tr(ref, 'save')),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true) {
+      // Combine selected date and time
+      final newDateTime = DateTime(
+        selectedDate.year,
+        selectedDate.month,
+        selectedDate.day,
+        selectedTime.hour,
+        selectedTime.minute,
+      );
+
+      // Update the sale
+      sale.saleDate = newDateTime;
+      await ref.read(saleProvider.notifier).updateSale(sale);
+      
+      if (context.mounted) {
+        Navigator.pop(context); // Close details dialog
+        _showSaleDetailsDialog(sale); // Reopen with updated date
+      }
+    }
   }
 
   Map<String, dynamic> _getCustomerLoyaltyStats(String customerId, List<Sale> sales) {
@@ -820,12 +919,10 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     if (sale.metadataJson == null || sale.metadataJson!.isEmpty) return [];
     try {
       final metadata = jsonDecode(sale.metadataJson!) as Map<String, dynamic>;
-      final discountPercent = (metadata['discountPercent'] as num?)?.toDouble() ?? 0;
       final discountAmount = (metadata['discountAmount'] as num?)?.toDouble() ?? 0;
-      if (discountPercent <= 0) return [];
+      if (discountAmount <= 0) return [];
       return [
-        _buildDetailRow('Discount', '${discountPercent.toStringAsFixed(0)}%'),
-        _buildDetailRow('Discount Value', CurrencyUtils.format(discountAmount)),
+        _buildDetailRow('Discount', CurrencyUtils.format(discountAmount)),
       ];
     } catch (_) {
       return [];

@@ -41,13 +41,30 @@ class StorageService {
       final file = File(localPath);
       if (!await file.exists()) return null;
 
+      // Ensure file is a valid image format (JPG, PNG, etc.)
       final fileName = p.basename(localPath);
-      final pathInBucket = '${DateTime.now().year}/${DateTime.now().month}/$fileName';
+      final fileExtension = p.extension(fileName).toLowerCase();
+      final validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
+      
+      if (!validExtensions.contains(fileExtension)) {
+        logger.warning('Invalid image format: $fileExtension. Only JPG, PNG, GIF, BMP, WEBP allowed.');
+        return null;
+      }
 
+      // Create unique path in bucket
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final uniqueFileName = '${timestamp}_$fileName';
+      final pathInBucket = '${DateTime.now().year}/${DateTime.now().month}/$uniqueFileName';
+
+      // Upload with upsert to handle duplicates
       await _supabase.storage.from(bucket).upload(
         pathInBucket,
         file,
-        fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
+        fileOptions: const FileOptions(
+          cacheControl: '3600', 
+          upsert: true,
+          contentType: 'image/jpeg', // Will be auto-detected by Supabase
+        ),
       );
 
       final url = _supabase.storage.from(bucket).getPublicUrl(pathInBucket);
